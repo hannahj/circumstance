@@ -35,7 +35,7 @@
   <div class="note">Take this outside to play.
 Fill it slowly.
 
-Everything you record here — readings, photos, sound — stays on this device. Nothing is uploaded, ever.</div>
+Everything you record here — readings, photos, sound — stays on your device. Nothing is uploaded, ever.</div>
   <button class="read" id="beginBtn">TAKE<br>READING</button>
 </div>
 
@@ -45,7 +45,10 @@ Everything you record here — readings, photos, sound — stays on this device.
 </div>
 
 <div class="overlay capture" id="captureOverlay">
+  <button class="close" id="capClose" aria-label="close">&#215;</button>
   <video id="viewfinder" autoplay playsinline muted></video>
+  <div class="prime" id="primeCard"></div>
+  <div class="capthint">press and hold</div>
   <div class="ritual">
     <svg class="ring" id="ring" viewBox="-100 -100 200 200"></svg>
   </div>

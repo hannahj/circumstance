@@ -184,6 +184,60 @@ footer {
 .note { font-size: 12px; opacity: 0.85; text-align: center; max-width: 280px; line-height: 1.6; white-space: pre-line; }
 #photoFull { max-width: 92vw; max-height: 80vh; border: 1.5px solid var(--ink); border-radius: 4px; }
 
+.capture .close { z-index: 4; }
+.prime {
+  display: none;
+  flex-direction: column;
+  gap: var(--s5);
+  max-width: 280px;
+  z-index: 3;
+  font-size: 12.5px; line-height: 1.7;
+  color: var(--ink);
+}
+.capture.priming .prime { display: flex; }
+.capture.priming .ritual, .capture.priming #wave, .capture.priming .cap-toggles { display: none; }
+.pill {
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 13px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.pill:active { background: var(--ink-wash-12); }
+.checkrow {
+  display: flex; align-items: center; gap: var(--s3);
+  cursor: pointer; user-select: none; -webkit-user-select: none;
+}
+.checkrow svg.g { width: 24px; height: 24px; flex-shrink: 0; }
+.checkbox {
+  width: 22px; height: 22px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  margin-left: auto;
+}
+.checkrow.checked .checkbox { background: var(--ink); }
+.checkbox svg { width: 14px; height: 14px; display: none; }
+.checkrow.checked .checkbox svg { display: block; }
+.capthint {
+  position: absolute;
+  top: calc(50% + 118px);
+  left: 0; right: 0;
+  text-align: center;
+  font-size: 11px; letter-spacing: 0.12em;
+  color: var(--ink);
+  opacity: 0;
+  z-index: 2;
+  transition: opacity 0.3s ease;
+}
+.capture.ready .capthint { opacity: 0.7; }
+.capture.video-live .capthint { color: var(--paper); }
+
 /* new-mark emphasis: the coin stamps in, a ring radiates once */
 .q.new > div > svg { animation: stampIn 0.5s ease-out; }
 .q.new::after {

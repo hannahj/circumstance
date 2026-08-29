@@ -264,6 +264,135 @@ async function toggleAudio() {
   }
 }
 
+// ---- ritual phases ----
+const HOLD_MS = 1500;
+let cancelFns = [];
+function capPhase(name) {
+  const o = $("captureOverlay");
+  o.classList.remove("priming", "ready", "reading");
+  if (name) o.classList.add(name);
+}
+function endRitual() {
+  ritualActive = false;
+  cancelFns.forEach(f => f());
+  cancelFns = [];
+  finishMedia();
+  const o = $("captureOverlay");
+  o.classList.remove("open", "video-live", "audio-live", "priming", "ready", "reading");
+  $("viewfinder").srcObject = null;
+  $("readBtn").disabled = false;
+}
+
+async function probeLocation() {
+  if (lastFix && Date.now() - lastFix.timestamp < 15000) return true;
+  try {
+    lastFix = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, maximumAge: 60000 }));
+    geoError = null;
+    return true;
+  } catch (e) {
+    if (e.code === 1) { endRitual(); showNote(geoHelp(e)); return false; }
+    return true; // timeout or unavailable: proceed, the reading has a longer window
+  }
+}
+
+// required sense, explained before asked
+function primeLocation() {
+  return new Promise(res => {
+    cancelFns.push(() => res(false));
+    capPhase("priming");
+    $("primeCard").innerHTML =
+      '<div>A reading is taken from where you stand. Your location is what the instrument reads \u2014 the game needs it, and it stays on your device.</div>' +
+      '<button class="pill" id="locGo">Allow location</button>';
+    $("locGo").addEventListener("click", async () => {
+      lsSet("locPrimed", "1");
+      res(await probeLocation());
+    });
+  });
+}
+
+// optional senses, chosen before asked
+function primeMedia() {
+  return new Promise(res => {
+    cancelFns.push(() => res(false));
+    capPhase("priming");
+    const row = (kind, label, on) =>
+      `<div class="checkrow${on ? " checked" : ""}" data-k="${kind}">
+        <svg class="g" viewBox="0 0 24 24">${TOG_ICONS[kind]}</svg>
+        <div>${label}</div>
+        <div class="checkbox"><svg viewBox="0 0 14 14"><path d="M2 7.5L5.5 11L12 3.5" fill="none" stroke="#f4f0e6" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+      </div>`;
+    $("primeCard").innerHTML =
+      '<div>A reading can also keep a photo and ten seconds of sound. Optional \u2014 and like everything here, kept only on your device.</div>' +
+      row("cam", "Photo", prefs.video) + row("mic", "Sound", prefs.audio) +
+      '<button class="pill" id="mediaGo">Continue</button>';
+    document.querySelectorAll("#primeCard .checkrow").forEach(r => {
+      r.addEventListener("click", () => {
+        const k = r.dataset.k === "cam" ? "video" : "audio";
+        prefs[k] = !prefs[k];
+        saveMediaPrefs(prefs);
+        r.classList.toggle("checked", prefs[k]);
+      });
+    });
+    $("mediaGo").addEventListener("click", () => {
+      lsSet("mediaPrimed", "1");
+      res(true);
+    });
+  });
+}
+
+function drawWave(wctx, overVideo) {
+  const levels = waveLevels(24);
+  wctx.clearRect(0, 0, 600, 88);
+  if (!levels) return;
+  wctx.fillStyle = overVideo ? PAPER : INKHEX;
+  const bw = 600 / 24;
+  levels.forEach((v, i) => {
+    const bh = Math.max(5, v * 80);
+    wctx.fillRect(i * bw + bw * 0.25, 44 - bh / 2, bw * 0.5, bh);
+  });
+}
+
+// the player fires the reading: press and hold to press the stamp
+function readyPhase() {
+  return new Promise(res => {
+    cancelFns.push(() => res(false));
+    capPhase("ready");
+    const ov = $("captureOverlay");
+    const wctx = $("wave").getContext("2d");
+    let holdStart = null, settled = false;
+    const down = () => { if (!settled) holdStart = Date.now(); };
+    const up = () => { if (!settled) holdStart = null; };
+    ov.addEventListener("pointerdown", down);
+    ov.addEventListener("pointerup", up);
+    ov.addEventListener("pointercancel", up);
+    const cleanup = () => {
+      ov.removeEventListener("pointerdown", down);
+      ov.removeEventListener("pointerup", up);
+      ov.removeEventListener("pointercancel", up);
+    };
+    (function frame() {
+      if (!ritualActive) { cleanup(); return; }
+      const overVideo = ov.classList.contains("video-live");
+      const stroke = overVideo ? PAPER : "var(--ink)";
+      const track = overVideo ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
+      const hold = holdStart ? (Date.now() - holdStart) / HOLD_MS : 0;
+      if (hold >= 1) {
+        settled = true;
+        cleanup();
+        return res(true);
+      }
+      const pulse = 6 + 2 * Math.sin(Date.now() / 320);
+      $("ring").innerHTML =
+        `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
+        (hold > 0 ? `<circle r="${(hold * 76).toFixed(1)}" fill="${overVideo ? "rgba(244,240,230,0.28)" : "rgba(182,65,46,0.18)"}"/>` : "") +
+        `<circle r="${pulse.toFixed(1)}" fill="${stroke}"/>`;
+      drawWave(wctx, overVideo);
+      requestAnimationFrame(frame);
+    })();
+  });
+}
+
 // ---- capture ritual ----
 async function takeReading() {
   startWatch(); // first gesture doubles as the permission moment
@@ -275,28 +404,16 @@ async function takeReading() {
   updateToggles();
   ritualActive = true;
 
-  // trust a live attempt over any query or remembered error — probed beneath the open ritual
-  if (!lastFix || Date.now() - lastFix.timestamp > 15000) {
-    try {
-      lastFix = await new Promise((res, rej) =>
-        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 4000, maximumAge: 60000 }));
-      geoError = null;
-    } catch (e) {
-      if (e.code === 1) {
-        ritualActive = false;
-        overlay.classList.remove("open");
-        showNote(geoHelp(e));
-        $("readBtn").disabled = false;
-        return;
-      }
-      // timeout or unavailable: proceed — the ritual has a longer window
-    }
+  // arming: explain, choose, then settle each sense in turn — no time runs yet
+  if (!lsGet("locPrimed")) {
+    if (!await primeLocation()) return;
+  } else if (!await probeLocation()) return;
+  if (!ritualActive) return;
+  if (!lsGet("mediaPrimed")) {
+    if (!await primeMedia()) return;
   }
-
-  // arming: settle each sense in turn, one prompt at a time, before any time runs
-  $("ring").innerHTML =
-    '<circle r="80" fill="none" stroke="var(--ink-wash-12)" stroke-width="3"/>' +
-    '<circle r="6" fill="var(--ink)"/>';
+  if (!ritualActive) return;
+  capPhase(null);
   if (prefs.video) {
     const ok = await startVideo();
     if (ok && ritualActive) {
@@ -308,9 +425,14 @@ async function takeReading() {
     const ok = await startAudio();
     if (ok && ritualActive) overlay.classList.add("audio-live");
   }
-  if (!ritualActive) return; // closed during arming (e.g. location help)
+  if (!ritualActive) return;
 
-  // only now does the reading begin
+  // ready: the player frames, listens, and presses the stamp when they choose
+  if (!await readyPhase()) return;
+  if (!ritualActive) return;
+
+  // the reading: a fixed window, hands-free
+  capPhase("reading");
   const t0 = Date.now();
   let fix = null, weather = null, place = null;
   const work = bestFix(RITUAL_MS - 1000).then(async f => {
@@ -325,32 +447,23 @@ async function takeReading() {
   const wctx = $("wave").getContext("2d");
   await new Promise(done => {
     (function frame() {
+      if (!ritualActive) return done();
       const t = Math.min(1, (Date.now() - t0) / RITUAL_MS);
       const a = Math.min(t, 0.9999) * 2 * Math.PI; // clockwise from the top
       const x = 80 * Math.sin(a), y = -80 * Math.cos(a);
       const large = a > Math.PI ? 1 : 0;
-      const overVideo = overlay.classList.contains("video-live");
-      const stroke = overVideo ? PAPER : "var(--ink)";
-      const track = overVideo ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
+      const ov2 = overlay.classList.contains("video-live");
+      const stroke = ov2 ? PAPER : "var(--ink)";
+      const track = ov2 ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
       $("ring").innerHTML =
         `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
         (t > 0.01 ? `<path d="M0 -80 A80 80 0 ${large} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round"/>` : "") +
-        (overVideo ? "" : `<circle r="6" fill="var(--ink)"/>`);
-
-      // real waveform: drawn only from a live microphone
-      const levels = waveLevels(24);
-      wctx.clearRect(0, 0, 600, 88);
-      if (levels) {
-        wctx.fillStyle = overVideo ? PAPER : INKHEX;
-        const bw = 600 / 24;
-        levels.forEach((v, i) => {
-          const bh = Math.max(5, v * 80);
-          wctx.fillRect(i * bw + bw * 0.25, 44 - bh / 2, bw * 0.5, bh);
-        });
-      }
+        (ov2 ? "" : `<circle r="6" fill="var(--ink)"/>`);
+      drawWave(wctx, ov2);
       if (t < 1) requestAnimationFrame(frame); else done();
     })();
   });
+  if (!ritualActive) return;
 
   // close of the ring: take the frame, seal the sound
   const photo = (prefs.video && overlay.classList.contains("video-live")) ? await snapPhoto(viewfinder) : null;
@@ -396,7 +509,7 @@ async function takeReading() {
   // one-time note when the reading saw but couldn't hear
   if (photo && !audio && prefs.audio && !lsGet("micNoteSeen")) {
     lsSet("micNoteSeen", "1");
-    showNote("This reading has a photo but no sound \u2014 the microphone isn't available to this browser.\n\nIf you want sound in your readings: Settings \u2192 Privacy & Security \u2192 Microphone \u2192 your browser, then allow the site's mic prompt on the next reading.\n\nReadings work fine without it.");
+    showNote("This reading has a photo but no sound \u2014 the microphone isn't available to your browser.\n\nIf you want sound in your readings: Settings \u2192 Privacy & Security \u2192 Microphone \u2192 your browser, then allow the site's mic prompt on the next reading.\n\nReadings work fine without it.");
   }
   if (capture.stamped) {
     renderGrid({ place: capture.place, weather: capture.weather, band: capture.band });
@@ -628,6 +741,7 @@ function showPhoto(blob) {
   setInterval(renderArc, 60000);
   $("readBtn").addEventListener("click", takeReading);
   $("camTog").addEventListener("click", toggleVideo);
+  $("capClose").addEventListener("click", endRitual);
   $("micTog").addEventListener("click", toggleAudio);
   updateToggles();
   if (isEphemeral())
