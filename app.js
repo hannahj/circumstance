@@ -164,7 +164,7 @@ function renderGrid(highlight, opts = {}) {
   } else if (stage === "coins") {
     const { places, weathers } = witnessed();
     grid.style.gridTemplateColumns =
-      `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+      `var(--gutter) repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, var(--cellcap))" : "1fr"})`;
     grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w)).join("");
     for (const p of places) {
       grid.insertAdjacentHTML("beforeend", glyph(p));
@@ -190,7 +190,7 @@ function renderGrid(highlight, opts = {}) {
     // deepened, but still growing: only witnessed rows and columns, now subdivided
     const { places: dp, weathers: dw } = witnessed();
     grid.style.gridTemplateColumns =
-      `22px repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+      `var(--gutter) repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, var(--cellcap))" : "1fr"})`;
     const trig = opts.deepening;
     grid.innerHTML = "<div></div>" + dw.map(w => glyph(w)).join("");
     for (const p of dp) {
