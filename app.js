@@ -129,42 +129,133 @@ function tryStamp(capture) {
   return { stamped: true };
 }
 
-// ---- rendering ----
-function renderGrid(highlight) {
+// ---- rendering: the grid grows toward what the player witnesses ----
+function resolvedCaptures() {
+  return captures.filter(c => c.place !== "pending" && c.weather !== "pending");
+}
+function cellStamped(p, w) {
+  return captures.filter(c => c.stamped && c.place === p && c.weather === w);
+}
+function gridStage() {
+  if (lsGet("deepened")) return "deep";
+  for (const p of PLACES) for (const w of WEATHERS)
+    if (cellStamped(p, w).length >= 2) { lsSet("deepened", "1"); return "deep"; }
+  return resolvedCaptures().length ? "coins" : "seed";
+}
+function witnessed() {
+  const rc = resolvedCaptures();
+  return {
+    places: PLACES.filter(p => rc.some(c => c.place === p)),
+    weathers: WEATHERS.filter(w => rc.some(c => c.weather === w)),
+  };
+}
+
+function renderGrid(highlight, opts = {}) {
   const grid = $("grid");
-  grid.innerHTML = "<div></div>" + WEATHERS.map(w => glyph(w)).join("");
-  for (const p of PLACES) {
-    grid.insertAdjacentHTML("beforeend", glyph(p));
-    for (const w of WEATHERS) {
-      const marks = {};
-      for (const c of captures)
-        if (c.stamped && c.place === p && c.weather === w) marks[c.band] = c;
-      const cell = document.createElement("div");
-      cell.className = "cell" + (BANDS.every(b => marks[b]) ? " complete" : "");
-      for (const b of BANDS) {
-        const q = document.createElement("div");
-        const isNew = highlight && highlight.place === p && highlight.weather === w && highlight.band === b;
-        q.className = "q" + (marks[b] ? "" : " empty") + (isNew ? " new" : "");
-        const inner = document.createElement("div");
-        if (marks[b]) inner.innerHTML =
-          `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[b]}"/></svg>`;
-        q.appendChild(inner);
-        cell.appendChild(q);
+  const stage = opts.forceStage || gridStage();
+  grid.classList.toggle("seed", stage === "seed");
+  grid.classList.toggle("deepening", !!opts.deepening);
+
+  if (stage === "seed") {
+    // one unlabeled mystery circle: the grid waits to be planted
+    grid.style.gridTemplateColumns = "1fr";
+    grid.style.maxWidth = "";
+    grid.innerHTML = '<div class="seedwrap"><div class="seedcircle"></div></div>';
+  } else if (stage === "coins") {
+    const { places, weathers } = witnessed();
+    grid.style.gridTemplateColumns =
+      `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+    grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w)).join("");
+    for (const p of places) {
+      grid.insertAdjacentHTML("beforeend", glyph(p));
+      for (const w of weathers) {
+        const kin = cellStamped(p, w);
+        const cell = document.createElement("div");
+        cell.className = "cell mono";
+        const isNew = highlight && highlight.place === p && highlight.weather === w;
+        if (kin.length) {
+          cell.innerHTML =
+            `<div class="q${isNew && highlight.band ? " new" : ""}"><div>` +
+            `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[kin[0].band]}"/></svg>` +
+            `</div></div>`;
+        } else {
+          cell.innerHTML = '<div class="q empty"><div></div></div>';
+        }
+        if (highlight && highlight.pulse && isNew) cell.classList.add("pulse");
+        cell.addEventListener("click", () => openSheet(p, w));
+        grid.appendChild(cell);
       }
-      if (highlight && highlight.pulse && highlight.place === p && highlight.weather === w)
-        cell.classList.add("pulse");
-      cell.addEventListener("click", () => openSheet(p, w));
-      grid.appendChild(cell);
+    }
+  } else {
+    grid.style.gridTemplateColumns = "";
+    grid.style.maxWidth = "";
+    const trig = opts.deepening;
+    grid.innerHTML = "<div></div>" + WEATHERS.map(w => glyph(w)).join("");
+    for (const p of PLACES) {
+      grid.insertAdjacentHTML("beforeend", glyph(p));
+      for (const w of WEATHERS) {
+        const marks = {};
+        for (const c of captures)
+          if (c.stamped && c.place === p && c.weather === w) marks[c.band] = c;
+        const cell = document.createElement("div");
+        cell.className = "cell" + (BANDS.every(b => marks[b]) ? " complete" : "");
+        if (trig) {
+          // the bloom washes outward from the cell that earned it
+          const pr = PLACES.indexOf(p) - PLACES.indexOf(trig.place);
+          const wc = WEATHERS.indexOf(w) - WEATHERS.indexOf(trig.weather);
+          cell.style.setProperty("--bloom-delay", (Math.hypot(pr, wc) * 90).toFixed(0) + "ms");
+        }
+        BANDS.forEach((b, qi) => {
+          const q = document.createElement("div");
+          const isNew = highlight && highlight.place === p && highlight.weather === w && highlight.band === b;
+          q.className = "q" + (marks[b] ? "" : " empty") + (isNew ? " new" : "");
+          if (trig && marks[b]) {
+            q.classList.add("settle");
+            q.style.setProperty("--sx", (qi % 2 ? "-54%" : "54%"));
+            q.style.setProperty("--sy", (qi > 1 ? "-54%" : "54%"));
+          }
+          const inner = document.createElement("div");
+          if (marks[b]) inner.innerHTML =
+            `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[b]}"/></svg>`;
+          q.appendChild(inner);
+          cell.appendChild(q);
+        });
+        if (highlight && highlight.pulse && highlight.place === p && highlight.weather === w)
+          cell.classList.add("pulse");
+        cell.addEventListener("click", () => openSheet(p, w));
+        grid.appendChild(cell);
+      }
     }
   }
-  const n = captures.filter(c => c.stamped).length;
+
   const devOn = FORCE.weather || FORCE.place || FORCE.band || DEV.has("dist");
-  $("counter").textContent = (devOn ? "\u26a0 dev \u00b7 " : "") + n + " / 64";
+  $("counter").textContent = devOn ? "\u26a0 dev" : "";
   const latest = captures[captures.length - 1];
   $("status").textContent = latest
     ? "Last reading: " + relativeDay(latest.time) + ", " + latest.band
     : "";
   renderRepeats();
+}
+
+// a stamp lands: bud, mark — or deepen
+function landStamp(c) {
+  const wasDeep = lsGet("deepened");
+  const doubled = cellStamped(c.place, c.weather).length >= 2;
+  if (!wasDeep && doubled) {
+    lsSet("deepened", "1");
+    // held beat on the familiar page, then the whole grid subdivides at once
+    renderGrid({ place: c.place, weather: c.weather, pulse: true, band: c.band }, { forceStage: "coins" });
+    document.body.classList.add("hush");
+    setTimeout(() => {
+      renderGrid(null, { deepening: { place: c.place, weather: c.weather } });
+      setTimeout(() => {
+        $("grid").classList.remove("deepening");
+        document.body.classList.remove("hush");
+      }, 2400);
+    }, 1100);
+  } else {
+    renderGrid({ place: c.place, weather: c.weather, band: c.band });
+  }
 }
 
 function renderRepeats() {
@@ -544,7 +635,7 @@ async function takeReading() {
     showNote("This reading has a photo but no sound \u2014 the microphone isn't available to your browser.\n\nIf you want sound in your readings: Settings \u2192 Privacy & Security \u2192 Microphone \u2192 your browser, then allow the site's mic prompt on the next reading.\n\nReadings work fine without it.");
   }
   if (capture.stamped) {
-    renderGrid({ place: capture.place, weather: capture.weather, band: capture.band });
+    landStamp(capture);
   } else {
     const known = capture.place !== "pending" && capture.weather !== "pending";
     renderGrid(known ? { place: capture.place, weather: capture.weather, pulse: true } : undefined);
@@ -582,7 +673,7 @@ async function takeReading() {
         }
         await putCapture(capture);
         if (capture.stamped)
-          renderGrid({ place: capture.place, weather: capture.weather, band: capture.band });
+          landStamp(capture);
         else {
           renderGrid();
           if (capture.place !== "pending" && capture.weather !== "pending" && capture.why)
@@ -624,7 +715,7 @@ async function resolvePending() {
       }
       if (changed) {
         await putCapture(c);
-        renderGrid();
+        if (c.stamped) landStamp(c); else renderGrid();
       }
     }
   } finally { resolving = false; }
@@ -634,7 +725,7 @@ async function removeCapture(c) {
   await deleteCapture(c.id);
   captures = captures.filter(x => x.id !== c.id);
   const promoted = await reEvaluateCell(c.place, c.weather);
-  renderGrid(promoted ? { place: promoted.place, weather: promoted.weather, band: promoted.band } : undefined);
+  if (promoted) landStamp(promoted); else renderGrid();
 }
 
 async function reEvaluateCell(p, w) {
@@ -772,6 +863,7 @@ function showPhoto(blob) {
     const dev = captures.filter(c => c.devForced);
     for (const c of dev) await deleteCapture(c.id);
     captures = captures.filter(c => !c.devForced);
+    lsSet("deepened", ""); // let a purged board grow again
   }
   renderGrid();
   resolvePending();
