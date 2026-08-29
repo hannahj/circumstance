@@ -10,7 +10,7 @@ const MIN_DIST_M = 500;      // spatial uniqueness: min distance between a cell'
 const RITUAL_MS = 10000;     // fixed reading duration
 const GOOD_FIX_M = 25;       // accuracy above this gets flagged on the record
 
-const PLACES = ["forest", "water", "open", "built"];
+const PLACES = ["forest", "water", "open", "built"];A
 const WEATHERS = ["clear", "cloud", "rain", "snow"];
 const BANDS = ["dawn", "day", "dusk", "night"];
 const SKY = { dawn: "var(--sky-dawn)", day: "var(--sky-day)", dusk: "var(--sky-dusk)", night: "var(--sky-night)" };
@@ -418,6 +418,10 @@ async function reEvaluateCell(p, w) {
   return promoted;
 }
 
+// row action icons: drawn, not typed, so weight and reach are ours to set
+const ICON_SHARE = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 6L18 18M18 6L6 18" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/></svg>';
+
 // ---- cell sheet ----
 function openSheet(p, w) {
   const sheet = $("cellSheet");
@@ -454,7 +458,7 @@ function openSheet(p, w) {
     }
     const share = document.createElement("button");
     share.className = "play";
-    share.textContent = "\u2197";
+    share.innerHTML = ICON_SHARE;
     share.addEventListener("click", async e => {
       e.stopPropagation();
       share.disabled = true;
@@ -464,7 +468,7 @@ function openSheet(p, w) {
     row.appendChild(share);
     const del = document.createElement("button");
     del.className = "play";
-    del.textContent = "\u00d7";
+    del.innerHTML = ICON_X;
     del.addEventListener("click", async e => {
       e.stopPropagation();
       if (!confirm("Delete this reading? Its photo and sound go with it.")) return;
