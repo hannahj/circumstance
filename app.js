@@ -46,6 +46,10 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const PAPER = "#f4f0e6", INKHEX = "#b6412e";
 const prefs = getMediaPrefs();
 let ritualActive = false;
+
+// intro decision happens before the page is allowed to paint
+if (!lsGet("circIntroSeen")) $("introOverlay").classList.add("open");
+document.body.classList.remove("booting");
 let captures = [];
 let lastFix = null;
 let watching = false;
@@ -283,30 +287,42 @@ function endRitual() {
   $("readBtn").disabled = false;
 }
 
-async function probeLocation() {
+// a genuine attempt at a fix; sets geoError on failure
+async function tryFix(timeoutMs) {
   if (lastFix && Date.now() - lastFix.timestamp < 15000) return true;
   try {
     lastFix = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, maximumAge: 60000 }));
+      navigator.geolocation.getCurrentPosition(res, rej, { timeout: timeoutMs, maximumAge: 60000 }));
     geoError = null;
     return true;
-  } catch (e) {
-    if (e.code === 1) { endRitual(); showNote(geoHelp(e)); return false; }
-    return true; // timeout or unavailable: proceed, the reading has a longer window
-  }
+  } catch (e) { geoError = e; return false; }
 }
 
-// required sense, explained before asked
+// required sense, explained before asked — and a hard gate: no fix, no reading
 function primeLocation() {
   return new Promise(res => {
     cancelFns.push(() => res(false));
     capPhase("priming");
     $("primeCard").innerHTML =
-      '<div>A reading is taken from where you stand. Your location is what the instrument reads \u2014 the game needs it, and it stays on your device.</div>' +
-      '<button class="pill" id="locGo">Allow location</button>';
-    $("locGo").addEventListener("click", async () => {
+      '<div>A reading is taken from your location and necessary for the game, but it is stored only on your device.</div>' +
+      '<div style="opacity:0.8">Taking a reading sends your coordinates to public weather and map services \u2014 with nothing about you attached.</div>' +
+      '<button class="pill" id="locGo">Allow location</button>' +
+      '<div id="locWait" style="opacity:0.7"></div>';
+    const go = $("locGo");
+    go.addEventListener("click", async () => {
       lsSet("locPrimed", "1");
-      res(await probeLocation());
+      go.disabled = true;
+      $("locWait").textContent = "Listening for a fix\u2026";
+      const ok = await tryFix(12000);
+      if (ok) return res(true);
+      if (geoError && geoError.code === 1) {
+        endRitual();
+        showNote(geoHelp(geoError));
+        return res(false);
+      }
+      go.disabled = false;
+      go.textContent = "Try again";
+      $("locWait").textContent = "No fix yet \u2014 open sky helps.";
     });
   });
 }
@@ -323,7 +339,7 @@ function primeMedia() {
         <div class="checkbox"><svg viewBox="0 0 14 14"><path d="M2 7.5L5.5 11L12 3.5" fill="none" stroke="#f4f0e6" stroke-width="2.4" stroke-linecap="round"/></svg></div>
       </div>`;
     $("primeCard").innerHTML =
-      '<div>A reading can also keep a photo and ten seconds of sound. Optional \u2014 and like everything here, kept only on your device.</div>' +
+      '<div>Your readings can optionally include a photo and/or short sound clip. These are also stored only on your device.</div>' +
       row("cam", "Photo", prefs.video) + row("mic", "Sound", prefs.audio) +
       '<button class="pill" id="mediaGo">Continue</button>';
     document.querySelectorAll("#primeCard .checkrow").forEach(r => {
@@ -405,10 +421,14 @@ async function takeReading() {
   ritualActive = true;
 
   // arming: explain, choose, then settle each sense in turn — no time runs yet
-  if (!lsGet("locPrimed")) {
-    if (!await primeLocation()) return;
-  } else if (!await probeLocation()) return;
-  if (!ritualActive) return;
+  let located = lsGet("locPrimed") ? await tryFix(8000) : false;
+  if (!located && geoError && geoError.code === 1) {
+    endRitual();
+    showNote(geoHelp(geoError));
+    return;
+  }
+  if (!located) located = await primeLocation(); // card blocks until a real fix
+  if (!located || !ritualActive) return;
   if (!lsGet("mediaPrimed")) {
     if (!await primeMedia()) return;
   }
@@ -711,7 +731,6 @@ function showPhoto(blob) {
 // ---- init ----
 (async function init() {
   if (!lsGet("circIntroSeen")) {
-    $("introOverlay").classList.add("open");
     $("beginBtn").addEventListener("click", () => {
       lsSet("circIntroSeen", "1");
       $("introOverlay").classList.remove("open");
@@ -725,7 +744,6 @@ function showPhoto(blob) {
     captures = captures.filter(c => !c.devForced);
   }
   if (!lsGet("circIntroSeen")) {
-    $("introOverlay").classList.add("open");
     $("beginBtn").addEventListener("click", () => {
       lsSet("circIntroSeen", "1");
       $("introOverlay").classList.remove("open");
