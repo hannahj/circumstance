@@ -1,6 +1,6 @@
 // thresholds under field tuning — see place-classifier field test
 // after deploying worker.js to Cloudflare, put its URL here (no trailing slash)
-const PROXY_URL = "https://misty-dew-73be.uglywalks.workers.dev/";
+const PROXY_URL = "https://misty-dew-73be.uglywalks.workers.dev";
 
 export const CFG = {
   WATER_DIST: 30,
@@ -12,6 +12,8 @@ export const CFG = {
 
 function overpassQuery(lat, lon) {
   const r = CFG.QUERY_RADIUS;
+  lat = +lat.toFixed(4); // ~11 m grid: identical spots -> identical, cacheable queries
+  lon = +lon.toFixed(4);
   return `[out:json][timeout:8];
 is_in(${lat},${lon})->.a;
 (
