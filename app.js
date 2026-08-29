@@ -141,7 +141,8 @@ function renderGrid(highlight) {
     }
   }
   const n = captures.filter(c => c.stamped).length;
-  $("counter").textContent = n + " / 64";
+  const devOn = FORCE.weather || FORCE.place || FORCE.band || DEV.has("dist");
+  $("counter").textContent = (devOn ? "\u26a0 dev \u00b7 " : "") + n + " / 64";
   const latest = captures[captures.length - 1];
   $("status").textContent = latest
     ? "Last reading: " + relativeDay(latest.time) + ", " + latest.band
@@ -394,6 +395,29 @@ async function resolvePending() {
   } finally { resolving = false; }
 }
 
+async function removeCapture(c) {
+  await deleteCapture(c.id);
+  captures = captures.filter(x => x.id !== c.id);
+  const promoted = await reEvaluateCell(c.place, c.weather);
+  renderGrid(promoted ? { place: promoted.place, weather: promoted.weather, band: promoted.band } : undefined);
+}
+
+async function reEvaluateCell(p, w) {
+  const kin = captures
+    .filter(x => x.place === p && x.weather === w && !x.stamped && x.why)
+    .sort((a, b) => a.time < b.time ? -1 : 1);
+  let promoted = null;
+  for (const x of kin) {
+    x.why = undefined;
+    const s = tryStamp(x);
+    x.stamped = s.stamped;
+    x.why = s.why;
+    await putCapture(x);
+    if (x.stamped && !promoted) promoted = x;
+  }
+  return promoted;
+}
+
 // ---- cell sheet ----
 function openSheet(p, w) {
   const sheet = $("cellSheet");
@@ -438,6 +462,16 @@ function openSheet(p, w) {
       share.disabled = false;
     });
     row.appendChild(share);
+    const del = document.createElement("button");
+    del.className = "play";
+    del.textContent = "\u00d7";
+    del.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!confirm("Delete this reading? Its photo and sound go with it.")) return;
+      await removeCapture(c);
+      openSheet(p, w); // refresh the sheet in place
+    });
+    row.appendChild(del);
     body.appendChild(row);
   }
   sheet.classList.add("open");
