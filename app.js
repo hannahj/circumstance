@@ -10,7 +10,7 @@ const MIN_DIST_M = 500;      // spatial uniqueness: min distance between a cell'
 const RITUAL_MS = 10000;     // fixed reading duration
 const GOOD_FIX_M = 25;       // accuracy above this gets flagged on the record
 
-const PLACES = ["forest", "water", "open", "built"];A
+const PLACES = ["forest", "water", "open", "built"];
 const WEATHERS = ["clear", "cloud", "rain", "snow"];
 const BANDS = ["dawn", "day", "dusk", "night"];
 const SKY = { dawn: "var(--sky-dawn)", day: "var(--sky-day)", dusk: "var(--sky-dusk)", night: "var(--sky-night)" };
