@@ -46,6 +46,8 @@ header {
   align-items: center;
 }
 .grid > svg { justify-self: center; }
+/* row-label glyphs hang from the paper's left edge, aligned with the title */
+.grid > svg:nth-child(5n+1) { justify-self: start; }
 .cell {
   aspect-ratio: 1;
   border: 1.5px solid var(--ink);
