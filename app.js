@@ -16,17 +16,18 @@ const BANDS = ["dawn", "day", "dusk", "night"];
 const SKY = { dawn: "var(--sky-dawn)", day: "var(--sky-day)", dusk: "var(--sky-dusk)", night: "var(--sky-night)" };
 
 const GLYPHS = {
-  clear: '<circle cx="12" cy="12" r="5.5" fill="none" stroke="var(--ink)" stroke-width="2.2"/>',
-  cloud: '<path d="M6 16a4 4 0 1 1 1-7.9A5 5 0 0 1 16.8 9 3.5 3.5 0 0 1 16 16Z" fill="none" stroke="var(--ink)" stroke-width="2"/>',
-  rain: '<path d="M7 4l-3 8M13 4l-3 8M19 4l-3 8" stroke="var(--ink)" stroke-width="2" fill="none"/><path d="M4 18h16" stroke="var(--ink)" stroke-width="2"/>',
-  snow: '<path d="M12 3v18M4 7l16 10M20 7L4 17" stroke="var(--ink)" stroke-width="1.8" fill="none"/>',
-  forest: '<path d="M12 3L6 14h4L7 21h10l-3-7h4Z" fill="var(--ink)"/>',
-  water: '<path d="M3 9q3-3 6 0t6 0 6 0M3 15q3-3 6 0t6 0 6 0" fill="none" stroke="var(--ink)" stroke-width="2"/>',
-  open: '<path d="M3 17q4-6 9-6t9 6" fill="none" stroke="var(--ink)" stroke-width="2"/><circle cx="18" cy="7" r="2.5" fill="var(--ink)"/>',
-  built: '<path d="M5 21V9h6v12M11 21V4h8v17M3 21h18" fill="none" stroke="var(--ink)" stroke-width="2"/>',
+  // display set: 48-unit grid, rounded terminals, one vocabulary at every size
+  clear: '<circle cx="24" cy="24" r="12" fill="none" stroke="var(--ink)" stroke-width="3.2"/>',
+  cloud: '<path d="M13 33a7.5 7.5 0 0 1 .5-15 11 11 0 0 1 21-2.5 8 8 0 0 1-1 17.5Z" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>',
+  rain: '<g stroke="var(--ink)" stroke-width="3" stroke-linecap="round" fill="none"><path d="M14 8l-6 14M26 6l-6 14M38 8l-6 14M20 28l-5 11M32 28l-5 11"/></g>',
+  snow: '<g stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" fill="none"><path d="M24 6v36M8.4 15l31.2 18M39.6 15L8.4 33"/><path d="M24 12.5l-1.6 2.8M24 12.5l1.6 2.8M24 35.5l-1.6-2.8M24 35.5l1.6-2.8M34 29.8l-3.2 0M34 29.8l1.6-2.8M14 18.2l3.2 0M14 18.2l-1.6 2.8M34 18.2l-3.2 0M34 18.2l1.6 2.8M14 29.8l3.2 0M14 29.8l-1.6-2.8"/></g>',
+  forest: '<path d="M24 5L15 19h4L12 32h9v10h6V32h9L29 19h4Z" fill="var(--ink)"/>',
+  water: '<g fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"><path d="M8 17q4-5 8 0t8 0 8 0 8 0"/><path d="M8 25q4-5 8 0t8 0 8 0 8 0"/><path d="M8 33q4-5 8 0t8 0 8 0 8 0"/></g>',
+  open: '<path d="M5 35q10-13 19-13t19 13" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/><circle cx="36" cy="11" r="4.5" fill="var(--ink)"/>',
+  built: '<g fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linejoin="round"><path d="M8 40V18h9v22M17 40V8h12v32M29 40V24h11v16M5 40h38"/></g><g fill="var(--ink)"><rect x="20.5" y="13" width="2.6" height="2.6"/><rect x="25.5" y="13" width="2.6" height="2.6"/><rect x="20.5" y="19" width="2.6" height="2.6"/><rect x="25.5" y="19" width="2.6" height="2.6"/><rect x="20.5" y="25" width="2.6" height="2.6"/><rect x="25.5" y="25" width="2.6" height="2.6"/></g>',
 };
 const glyph = (name, size = 22) =>
-  `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-label="${name}">${GLYPHS[name]}</svg>`;
+  `<svg viewBox="0 0 48 48" width="${size}" height="${size}" aria-label="${name}">${GLYPHS[name]}</svg>`;
 
 // dev overrides, URL-only, no UI: ?w=snow&p=water&b=dusk&dist=0
 // w/p/b force weather, place, band; dist overrides the uniqueness distance (0 disables)
