@@ -187,13 +187,15 @@ function renderGrid(highlight, opts = {}) {
       }
     }
   } else {
-    grid.style.gridTemplateColumns = "";
-    grid.style.maxWidth = "";
+    // deepened, but still growing: only witnessed rows and columns, now subdivided
+    const { places: dp, weathers: dw } = witnessed();
+    grid.style.gridTemplateColumns =
+      `22px repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
     const trig = opts.deepening;
-    grid.innerHTML = "<div></div>" + WEATHERS.map(w => glyph(w)).join("");
-    for (const p of PLACES) {
+    grid.innerHTML = "<div></div>" + dw.map(w => glyph(w)).join("");
+    for (const p of dp) {
       grid.insertAdjacentHTML("beforeend", glyph(p));
-      for (const w of WEATHERS) {
+      for (const w of dw) {
         const marks = {};
         for (const c of captures)
           if (c.stamped && c.place === p && c.weather === w) marks[c.band] = c;
@@ -201,8 +203,8 @@ function renderGrid(highlight, opts = {}) {
         cell.className = "cell" + (BANDS.every(b => marks[b]) ? " complete" : "");
         if (trig) {
           // the bloom washes outward from the cell that earned it
-          const pr = PLACES.indexOf(p) - PLACES.indexOf(trig.place);
-          const wc = WEATHERS.indexOf(w) - WEATHERS.indexOf(trig.weather);
+          const pr = dp.indexOf(p) - dp.indexOf(trig.place);
+          const wc = dw.indexOf(w) - dw.indexOf(trig.weather);
           cell.style.setProperty("--bloom-delay", (Math.hypot(pr, wc) * 90).toFixed(0) + "ms");
         }
         BANDS.forEach((b, qi) => {
