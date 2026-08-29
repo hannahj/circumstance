@@ -154,6 +154,7 @@ function renderGrid(highlight, opts = {}) {
   const grid = $("grid");
   const stage = opts.forceStage || gridStage();
   grid.classList.toggle("seed", stage === "seed");
+  grid.classList.remove("wide");
   grid.classList.toggle("deepening", !!opts.deepening);
 
   if (stage === "seed") {
@@ -165,6 +166,7 @@ function renderGrid(highlight, opts = {}) {
     const { places, weathers } = witnessed();
     grid.style.gridTemplateColumns =
       `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+    grid.classList.toggle("wide", weathers.length === 4);
     grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w).replace("<svg ", '<svg class="colg" ')).join("");
     for (const p of places) {
       grid.insertAdjacentHTML("beforeend", glyph(p).replace("<svg ", '<svg class="rowg" '));
@@ -192,6 +194,7 @@ function renderGrid(highlight, opts = {}) {
     grid.style.gridTemplateColumns =
       `22px repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
     const trig = opts.deepening;
+    grid.classList.toggle("wide", dw.length === 4);
     grid.innerHTML = "<div></div>" + dw.map(w => glyph(w).replace("<svg ", '<svg class="colg" ')).join("");
     for (const p of dp) {
       grid.insertAdjacentHTML("beforeend", glyph(p).replace("<svg ", '<svg class="rowg" '));

@@ -46,7 +46,10 @@ header {
   grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);
   align-items: center;
-  /* only the grid grows on wide screens: it may exceed the text column, up to a cap */
+}
+/* only a full-width (four-column) grid grows on wide screens, up to a cap;
+   young boards keep the normal column layout */
+.grid.wide {
   width: min(calc(100vw - 32px), 560px);
   margin-left: 50%;
   transform: translateX(-50%);
