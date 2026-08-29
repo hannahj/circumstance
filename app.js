@@ -287,6 +287,11 @@ function endRitual() {
   $("readBtn").disabled = false;
 }
 
+async function geoPermState() {
+  try { return (await navigator.permissions.query({ name: "geolocation" })).state; }
+  catch { return "unknown"; }
+}
+
 // a genuine attempt at a fix; sets geoError on failure
 async function tryFix(timeoutMs) {
   if (lastFix && Date.now() - lastFix.timestamp < 15000) return true;
@@ -304,25 +309,30 @@ function primeLocation() {
     cancelFns.push(() => res(false));
     capPhase("priming");
     $("primeCard").innerHTML =
-      '<div>A reading is taken from your location and necessary for the game, but it is stored only on your device.</div>' +
-      '<div style="opacity:0.8">Taking a reading sends your coordinates to public weather and map services \u2014 with nothing about you attached.</div>' +
+      '<div>A reading is taken from your location and necessary for the game, but it is only stored on your device.</div>' +
       '<button class="pill" id="locGo">Allow location</button>' +
       '<div id="locWait" style="opacity:0.7"></div>';
     const go = $("locGo");
     go.addEventListener("click", async () => {
       lsSet("locPrimed", "1");
       go.disabled = true;
-      $("locWait").textContent = "Listening for a fix\u2026";
+      $("locWait").textContent = "Locating\u2026";
       const ok = await tryFix(12000);
       if (ok) return res(true);
-      if (geoError && geoError.code === 1) {
+      const st = await geoPermState();
+      if (st === "denied") {
         endRitual();
-        showNote(geoHelp(geoError));
+        showNote(geoHelp({ code: 1 }));
         return res(false);
       }
       go.disabled = false;
-      go.textContent = "Try again";
-      $("locWait").textContent = "No fix yet \u2014 open sky helps.";
+      if (st === "prompt") {
+        go.textContent = "Allow location";
+        $("locWait").textContent = "Location permission hasn't been given yet \u2014 tap Allow and answer your browser's prompt.";
+      } else {
+        go.textContent = "Try again";
+        $("locWait").textContent = "No location yet \u2014 open sky helps.";
+      }
     });
   });
 }
@@ -422,7 +432,7 @@ async function takeReading() {
 
   // arming: explain, choose, then settle each sense in turn — no time runs yet
   let located = lsGet("locPrimed") ? await tryFix(8000) : false;
-  if (!located && geoError && geoError.code === 1) {
+  if (!located && geoError && geoError.code === 1 && (await geoPermState()) === "denied") {
     endRitual();
     showNote(geoHelp(geoError));
     return;
