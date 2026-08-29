@@ -47,6 +47,8 @@ header {
   gap: var(--s2);
   align-items: center;
 }
+/* young boards (one or two columns) centre as objects; wider boards anchor left as documents */
+.grid.young { justify-content: center; }
 /* only a full-width (four-column) grid grows on wide screens, up to a cap;
    young boards keep the normal column layout */
 .grid.wide {
