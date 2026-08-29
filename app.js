@@ -89,11 +89,18 @@ document.addEventListener("visibilitychange", () => {
   resolvePending();
 });
 
-function bestFix(timeoutMs) {
-  if (lastFix && Date.now() - lastFix.timestamp < 15000) return Promise.resolve(lastFix);
-  return new Promise((res, rej) =>
-    navigator.geolocation.getCurrentPosition(res, e => { geoError = e; rej(e); },
-      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 10000 }));
+async function bestFix(timeoutMs) {
+  if (lastFix && Date.now() - lastFix.timestamp < 15000) return lastFix;
+  try {
+    return await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej,
+        { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 120000 }));
+  } catch (e) {
+    geoError = e;
+    // the player stands still during a ritual: a slightly old fix beats none
+    if (lastFix && Date.now() - lastFix.timestamp < 180000) return lastFix;
+    throw e;
+  }
 }
 
 function geoHelp(e) {
@@ -269,7 +276,6 @@ async function toggleAudio() {
 }
 
 // ---- ritual phases ----
-const HOLD_MS = 1500;
 let cancelFns = [];
 function capPhase(name) {
   const o = $("captureOverlay");
@@ -299,6 +305,7 @@ async function tryFix(timeoutMs) {
     lastFix = await new Promise((res, rej) =>
       navigator.geolocation.getCurrentPosition(res, rej, { timeout: timeoutMs, maximumAge: 60000 }));
     geoError = null;
+    if (watchId === null) { watching = false; startWatch(); }
     return true;
   } catch (e) { geoError = e; return false; }
 }
@@ -383,39 +390,30 @@ function drawWave(wctx, overVideo) {
   });
 }
 
-// the player fires the reading: press and hold to press the stamp
+// the player fires the reading: a tap begins it
 function readyPhase() {
   return new Promise(res => {
     cancelFns.push(() => res(false));
     capPhase("ready");
     const ov = $("captureOverlay");
     const wctx = $("wave").getContext("2d");
-    let holdStart = null, settled = false;
-    const down = () => { if (!settled) holdStart = Date.now(); };
-    const up = () => { if (!settled) holdStart = null; };
-    ov.addEventListener("pointerdown", down);
-    ov.addEventListener("pointerup", up);
-    ov.addEventListener("pointercancel", up);
-    const cleanup = () => {
-      ov.removeEventListener("pointerdown", down);
-      ov.removeEventListener("pointerup", up);
-      ov.removeEventListener("pointercancel", up);
+    let settled = false;
+    const down = e => {
+      if (settled || e.target.closest(".tbtn") || e.target.closest(".close")) return;
+      settled = true;
+      cleanup();
+      res(true);
     };
+    ov.addEventListener("pointerdown", down);
+    const cleanup = () => ov.removeEventListener("pointerdown", down);
     (function frame() {
-      if (!ritualActive) { cleanup(); return; }
+      if (!ritualActive || settled) { cleanup(); return; }
       const overVideo = ov.classList.contains("video-live");
       const stroke = overVideo ? PAPER : "var(--ink)";
       const track = overVideo ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
-      const hold = holdStart ? (Date.now() - holdStart) / HOLD_MS : 0;
-      if (hold >= 1) {
-        settled = true;
-        cleanup();
-        return res(true);
-      }
       const pulse = 6 + 2 * Math.sin(Date.now() / 320);
       $("ring").innerHTML =
         `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
-        (hold > 0 ? `<circle r="${(hold * 76).toFixed(1)}" fill="${overVideo ? "rgba(244,240,230,0.28)" : "rgba(182,65,46,0.18)"}"/>` : "") +
         `<circle r="${pulse.toFixed(1)}" fill="${stroke}"/>`;
       drawWave(wctx, overVideo);
       requestAnimationFrame(frame);
@@ -751,23 +749,8 @@ function showPhoto(blob) {
       takeReading(); // the first reading IS the tutorial
     });
   }
-  captures = await allCaptures();
-  if (DEV.get("purge") === "dev") {
-    const dev = captures.filter(c => c.devForced);
-    for (const c of dev) await deleteCapture(c.id);
-    captures = captures.filter(c => !c.devForced);
-  }
-  if (!lsGet("circIntroSeen")) {
-    $("beginBtn").addEventListener("click", () => {
-      lsSet("circIntroSeen", "1");
-      $("introOverlay").classList.remove("open");
-      takeReading(); // the first reading IS the tutorial
-    });
-    $("skipIntro").addEventListener("click", () => {
-      lsSet("circIntroSeen", "1");
-      $("introOverlay").classList.remove("open");
-    });
-  }
+
+  // paint and wire everything synchronously: no data load may delay the page
   renderGrid();
   renderArc();
   setInterval(renderArc, 60000);
@@ -776,8 +759,22 @@ function showPhoto(blob) {
   $("capClose").addEventListener("click", endRitual);
   $("micTog").addEventListener("click", toggleAudio);
   updateToggles();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+  // then the archive arrives, however long it takes
+  try {
+    captures = await allCaptures();
+  } catch (e) {
+    captures = [];
+    console.error("capture load failed", e);
+  }
+  if (DEV.get("purge") === "dev") {
+    const dev = captures.filter(c => c.devForced);
+    for (const c of dev) await deleteCapture(c.id);
+    captures = captures.filter(c => !c.devForced);
+  }
+  renderGrid();
+  resolvePending();
   if (isEphemeral())
     showNote("Private window: readings can be taken but nothing is kept after this tab closes.");
-  resolvePending();
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
