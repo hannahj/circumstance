@@ -1,6 +1,6 @@
 import { timeBand, sunTimes } from "./sun.js";
 import { fetchWeatherNow, backfillWeather } from "./weather.js";
-import { classifyPlace } from "./classify.js";
+import { classifyPlace, takeEvidence } from "./classify.js";
 import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
 import { getMediaPrefs, saveMediaPrefs, startVideo, startAudio, stopVideo, stopAudio,
          videoStreamRef, audioActive, waveLevels, snapPhoto, finishMedia } from "./media.js";
@@ -234,7 +234,8 @@ function renderGrid(highlight, opts = {}) {
   $("counter").textContent = devOn ? "\u26a0 dev" : "";
   const latest = captures[captures.length - 1];
   $("status").textContent = latest
-    ? "Last reading: " + relativeDay(latest.time) + ", " + latest.band
+    ? "Last reading: " + relativeDay(latest.time) + ", " + latest.band +
+      (latest.why ? " \u00b7 repeat" : "")
     : "";
   renderRepeats();
 }
@@ -552,6 +553,17 @@ async function takeReading() {
   }
   if (!ritualActive) return;
 
+  // resolution starts while the player frames: by the tap, answers are usually already home
+  let fix = null, weather = null, place = null, capture0Evidence = null;
+  const work = bestFix(RITUAL_MS - 1000).then(async f => {
+    fix = f;
+    const { latitude, longitude } = f.coords;
+    await Promise.allSettled([
+      fetchWeatherNow(latitude, longitude).then(w => { weather = w; }),
+      classifyPlace(latitude, longitude).then(p => { place = p; capture0Evidence = takeEvidence(); }),
+    ]);
+  }).catch(() => {});
+
   // ready: the player frames, listens, and presses the stamp when they choose
   if (!await readyPhase()) return;
   if (!ritualActive) return;
@@ -559,16 +571,6 @@ async function takeReading() {
   // the reading: a fixed window, hands-free
   capPhase("reading");
   const t0 = Date.now();
-  let fix = null, weather = null, place = null;
-  const work = bestFix(RITUAL_MS - 1000).then(async f => {
-    fix = f;
-    const { latitude, longitude } = f.coords;
-    await Promise.allSettled([
-      fetchWeatherNow(latitude, longitude).then(w => { weather = w; }),
-      classifyPlace(latitude, longitude).then(p => { place = p; }),
-    ]);
-  }).catch(() => {});
-
   const wctx = $("wave").getContext("2d");
   await new Promise(done => {
     (function frame() {
@@ -618,6 +620,7 @@ async function takeReading() {
     place: place || "pending",
     stamped: false,
   };
+  if (capture0Evidence) capture.placeEvidence = capture0Evidence;
   if (FORCE.weather) { capture.weather = FORCE.weather; capture.devForced = true; }
   if (FORCE.place) { capture.place = FORCE.place; capture.devForced = true; }
   if (FORCE.band) { capture.band = FORCE.band; capture.devForced = true; }
@@ -646,6 +649,21 @@ async function takeReading() {
   }
   $("readBtn").disabled = false;
 
+  if (DEV.has("label")) {
+    const note = $("noteOverlay"), txt = $("noteText");
+    txt.innerHTML = '<div style="margin-bottom:10px">Your call:</div>' +
+      '<div style="display:flex;gap:14px;justify-content:center">' +
+      PLACES.map(p => `<button class="tbtn on" data-hp="${p}" style="width:52px;height:52px">${glyph(p, 30)}</button>`).join("") +
+      "</div>";
+    note.classList.add("open");
+    note.onclick = async e => {
+      const b = e.target.closest("[data-hp]");
+      if (b) { capture.humanPlace = b.dataset.hp; await putCapture(capture); }
+      note.classList.remove("open");
+      note.onclick = null;
+    };
+  }
+
   if (!lsGet("firstRevealSeen")) {
     lsSet("firstRevealSeen", "1");
     $("revealCoin").style.background = SKY[capture.band];
@@ -661,7 +679,7 @@ async function takeReading() {
   if (capture.place === "pending" || capture.weather === "pending") {
     work.then(async () => {
       let changed = false;
-      if (capture.place === "pending" && place) { capture.place = place; changed = true; }
+      if (capture.place === "pending" && place) { capture.place = place; capture.placeEvidence = capture0Evidence; changed = true; }
       if (capture.weather === "pending" && weather) {
         capture.weather = weather.bucket; capture.weatherCode = weather.code;
         capture.tempC = weather.temp; capture.windKmh = weather.wind;
@@ -696,7 +714,7 @@ async function resolvePending() {
     for (const c of captures) {
       let changed = false;
       if (c.place === "pending") {
-        try { c.place = await classifyPlace(c.lat, c.lon); changed = true; }
+        try { c.place = await classifyPlace(c.lat, c.lon); c.placeEvidence = takeEvidence(); changed = true; }
         catch (e) { if (DEV.has("debug")) flashStatus("place: " + (e.message || e).slice(0, 120)); }
       }
       if (c.weather === "pending") {
@@ -869,6 +887,17 @@ function showPhoto(blob) {
   }
   renderGrid();
   resolvePending();
+  // heartbeat: while anything is pending, keep trying (worker caching makes retries cheap)
+  setInterval(() => {
+    if (captures.some(c => c.place === "pending" || c.weather === "pending")) resolvePending();
+  }, 20000);
   if (isEphemeral())
     showNote("Private window: readings can be taken but nothing is kept after this tab closes.");
+  if (DEV.has("export")) {
+    const rows = captures.map(({ photo, audio, ...rest }) => rest);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(rows, null, 1)], { type: "application/json" }));
+    a.download = "circumstance-archive.json";
+    a.click();
+  }
 })();

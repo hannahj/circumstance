@@ -60,7 +60,31 @@ function distToWay(lat, lon, geom) {
   return best;
 }
 
+// device-side answer cache: your neighbourhood classifies once, ever (~110 m squares, LRU-capped)
+function cacheKey(lat, lon) { return lat.toFixed(3) + "," + lon.toFixed(3); }
+function cacheGet(lat, lon) {
+  try {
+    const m = JSON.parse(localStorage.getItem("placeCache") || "{}");
+    return m[cacheKey(lat, lon)] || null;
+  } catch { return null; }
+}
+function cachePut(lat, lon, bucket) {
+  try {
+    const m = JSON.parse(localStorage.getItem("placeCache") || "{}");
+    m[cacheKey(lat, lon)] = bucket;
+    const keys = Object.keys(m);
+    if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete m[k];
+    localStorage.setItem("placeCache", JSON.stringify(m));
+  } catch {}
+}
+
+// evidence of the most recent classification, for field research (null on cache hits)
+let _evidence = null;
+export function takeEvidence() { const e = _evidence; _evidence = null; return e; }
+
 export async function classifyPlace(lat, lon) {
+  const hit = cacheGet(lat, lon);
+  if (hit) { _evidence = { cached: true }; return hit; }
   const res = await fetch(PROXY_URL, {
     method: "POST",
     body: overpassQuery(lat, lon),
@@ -86,9 +110,19 @@ export async function classifyPlace(lat, lon) {
     else if (Object.keys(t).length === 0) near.water = Math.min(near.water, d); // water-relation member
   }
 
+  const r = x => x === Infinity ? null : Math.round(x);
+  _evidence = {
+    inWaterArea, inWoodArea,
+    water: r(near.water), wood: r(near.wood),
+    building: r(near.building), road: r(near.road),
+  };
+
   // precedence: water > forest > built > open
-  if (inWaterArea || near.water <= CFG.WATER_DIST) return "water";
-  if (inWoodArea || near.wood <= CFG.FOREST_EDGE) return "forest";
-  if (near.building <= CFG.BUILDING_DIST || near.road <= CFG.ROAD_DIST) return "built";
-  return "open";
+  let bucket;
+  if (inWaterArea || near.water <= CFG.WATER_DIST) bucket = "water";
+  else if (inWoodArea || near.wood <= CFG.FOREST_EDGE) bucket = "forest";
+  else if (near.building <= CFG.BUILDING_DIST || near.road <= CFG.ROAD_DIST) bucket = "built";
+  else bucket = "open";
+  cachePut(lat, lon, bucket);
+  return bucket;
 }
