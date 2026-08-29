@@ -1,7 +1,8 @@
-// specimen card: one reading rendered for the outside world
+// specimen card: one reading rendered for the outside world (image only — video was too slow)
 const INK = "#b6412e";
 const PAPER = "#f4f0e6";
 const SKYHEX = { dawn: "#dcaab8", day: "#a3c3d6", dusk: "#b8623a", night: "#333c54" };
+const GAME_URL = "hannahj.github.io/circumstance";
 const W = 1080, H = 1350;
 
 const GLYPH_PATHS = {
@@ -16,147 +17,105 @@ const GLYPH_PATHS = {
 };
 
 const glyphCache = {};
-function glyphImage(name) {
-  if (glyphCache[name]) return Promise.resolve(glyphCache[name]);
+function glyphImage(name, color) {
+  const key = name + color;
+  if (glyphCache[key]) return Promise.resolve(glyphCache[key]);
   return new Promise(res => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${GLYPH_PATHS[name].replaceAll("I", INK)}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${GLYPH_PATHS[name].replaceAll("I", color)}</svg>`;
     const img = new Image();
-    img.onload = () => { glyphCache[name] = img; res(img); };
+    img.onload = () => { glyphCache[key] = img; res(img); };
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   });
 }
 
-// fully synchronous: the video recorder samples frames constantly,
-// so every draw must be complete the moment it returns
-function drawCard(ctx, capture, assets) {
-  const { photoBitmap, g1, g2 } = assets;
-  ctx.fillStyle = PAPER;
+async function cardBlob(capture) {
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // the sky colour of the capture IS the card; foreground flips for legibility
+  const bg = SKYHEX[capture.band] || PAPER;
+  const fg = (capture.band === "dawn" || capture.band === "day") ? INK : PAPER;
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // header
-  ctx.fillStyle = INK;
+  ctx.fillStyle = fg;
+  ctx.textAlign = "center";
   ctx.font = "600 44px ui-monospace, Menlo, monospace";
-  ctx.textAlign = "left";
-  ctx.fillText("C I R C U M S T A N C E", 80, 130);
-  ctx.fillRect(80, 160, W - 160, 6);
+  ctx.fillText("C I R C U M S T A N C E", W / 2, 130);
+  ctx.fillRect(W / 2 - 460, 160, 920, 6);
 
-  // central circle: photo, ringed in ink — or the band coin
   const cx = W / 2, cy = 640, r = 360;
-  if (photoBitmap) {
+  if (capture.photo) {
+    const bmp = await createImageBitmap(capture.photo);
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.clip();
-    const s = Math.max((2 * r) / photoBitmap.width, (2 * r) / photoBitmap.height);
-    ctx.drawImage(photoBitmap,
-      cx - photoBitmap.width * s / 2, cy - photoBitmap.height * s / 2,
-      photoBitmap.width * s, photoBitmap.height * s);
+    const s = Math.max((2 * r) / bmp.width, (2 * r) / bmp.height);
+    ctx.drawImage(bmp, cx - bmp.width * s / 2, cy - bmp.height * s / 2, bmp.width * s, bmp.height * s);
     ctx.restore();
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = fg;
     ctx.lineWidth = 10;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.stroke();
   } else {
-    ctx.fillStyle = SKYHEX[capture.band] || INK;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.75, 0, 2 * Math.PI);
-    ctx.fill();
+    // no photo: the condition drawn as a stamp — dial geometry, place on the horizon, weather in the sky
+    const R = r * 0.82;
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.9, 0, 2 * Math.PI); ctx.stroke();
+
+    const hy = cy + R * 0.28; // horizon chord
+    const half = Math.sqrt(Math.max(0, (R * 0.9) ** 2 - (hy - cy) ** 2));
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(cx - half, hy); ctx.lineTo(cx + half, hy); ctx.stroke();
+
+    if (capture.place && capture.place !== "pending") {
+      const g = await glyphImage(capture.place, fg);
+      const gs = 250;
+      ctx.drawImage(g, cx - gs / 2, hy - gs + 22, gs, gs); // standing on the horizon
+    }
+    if (capture.weather && capture.weather !== "pending") {
+      const g = await glyphImage(capture.weather, fg);
+      const gs = 130;
+      ctx.drawImage(g, cx + half * 0.45 - gs / 2, cy - R * 0.6, gs, gs); // in the sky
+    }
   }
 
-  // condition glyphs
-  if (g1 && g2) {
+  const known = capture.place && capture.place !== "pending" && capture.weather && capture.weather !== "pending";
+  if (known && capture.photo) {
+    const g1 = await glyphImage(capture.place, fg);
+    const g2 = await glyphImage(capture.weather, fg);
     const gs = 110, gap = 70;
     ctx.drawImage(g1, cx - gs - gap / 2, 1090, gs, gs);
     ctx.drawImage(g2, cx + gap / 2, 1090, gs, gs);
   }
 
-  // band, date, small mark
-  ctx.fillStyle = INK;
-  ctx.textAlign = "center";
   ctx.font = "36px ui-monospace, Menlo, monospace";
-  const when = new Date(capture.time).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   ctx.globalAlpha = 0.85;
-  ctx.fillText(capture.band + " \u00b7 " + when, cx, 1275);
+  ctx.fillText(new Date(capture.time).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }), cx, 1260);
+  ctx.font = "30px ui-monospace, Menlo, monospace";
+  ctx.globalAlpha = 0.7;
+  ctx.fillText(GAME_URL, cx, 1315);
   ctx.globalAlpha = 1;
-}
 
-async function cardCanvas(capture) {
-  const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
-  const known = capture.place && capture.place !== "pending" && capture.weather && capture.weather !== "pending";
-  const assets = {
-    photoBitmap: capture.photo ? await createImageBitmap(capture.photo) : null,
-    g1: known ? await glyphImage(capture.place) : null,
-    g2: known ? await glyphImage(capture.weather) : null,
-  };
-  drawCard(canvas.getContext("2d"), capture, assets);
-  return { canvas, assets };
-}
-
-function canvasBlob(canvas) {
   return new Promise(res => canvas.toBlob(b => res(b), "image/jpeg", 0.9));
 }
 
-// card + sound -> realtime-recorded video, the length of the recording
-async function cardVideo(capture, canvas, assets) {
-  const ac = new (window.AudioContext || window.webkitAudioContext)();
-  const buf = await ac.decodeAudioData(await capture.audio.arrayBuffer());
-  const dest = ac.createMediaStreamDestination();
-  const src = ac.createBufferSource();
-  src.buffer = buf;
-  src.connect(dest);
-
-  const mime = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
-    .find(m => MediaRecorder.isTypeSupported(m));
-  if (!mime) throw new Error("no video support");
-
-  const stream = new MediaStream([
-    ...canvas.captureStream(30).getVideoTracks(),
-    ...dest.stream.getAudioTracks(),
-  ]);
-  const rec = new MediaRecorder(stream, { mimeType: mime });
-  const chunks = [];
-  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-
-  const ctx = canvas.getContext("2d");
-  const repaint = setInterval(() => drawCard(ctx, capture, assets), 250); // keep frames flowing
-
-  const done = new Promise(res => { rec.onstop = res; });
-  rec.start();
-  src.start();
-  src.onended = () => setTimeout(() => rec.stop(), 400);
-  await done;
-  clearInterval(repaint);
-  ac.close();
-  return new Blob(chunks, { type: mime.split(";")[0] });
-}
-
 export async function shareCapture(capture) {
-  const { canvas, assets } = await cardCanvas(capture);
-  let blob, filename;
-  if (capture.audio) {
-    try {
-      blob = await cardVideo(capture, canvas, assets);
-      filename = "circumstance-reading." + (blob.type.includes("mp4") ? "mp4" : "webm");
-    } catch {
-      blob = await canvasBlob(canvas);
-      filename = "circumstance-reading.jpg";
-    }
-  } else {
-    blob = await canvasBlob(canvas);
-    filename = "circumstance-reading.jpg";
-  }
-
-  const file = new File([blob], filename, { type: blob.type });
+  const blob = await cardBlob(capture);
+  const file = new File([blob], "circumstance-reading.jpg", { type: "image/jpeg" });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file] }); return; }
     catch (e) { if (e.name === "AbortError") return; }
   }
-  // fallback: download
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = filename;
+  a.download = "circumstance-reading.jpg";
   a.click();
 }
