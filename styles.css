@@ -41,7 +41,7 @@ header {
 
 .grid {
   display: grid;
-  grid-template-columns: 34px repeat(4, 1fr);
+  grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);
   align-items: center;
 }
@@ -73,7 +73,7 @@ footer {
   margin-top: var(--s4);
   gap: var(--s3);
 }
-.almanac { flex: 1; min-width: 0; margin-left: 42px; }
+.almanac { flex: 1; min-width: 0; margin-left: 30px; }
 .almanac svg { display: block; width: 100%; }
 .status { font-size: 11.5px; opacity: 0.8; margin-top: var(--s2); min-height: 1.2em; }
 .read {
@@ -100,11 +100,11 @@ footer {
   border-top: 1px solid var(--ink-wash-45);
   padding-top: var(--s3);
   margin-bottom: var(--s2);
-  margin-left: 42px;
+  margin-left: 30px;
 }
 .rc-row {
   display: flex; align-items: center; gap: var(--s2);
-  margin-left: 42px;
+  margin-left: 30px;
   padding: var(--s1) 0;
   font-size: 11.5px;
   opacity: 0.85;
@@ -137,17 +137,53 @@ footer {
   font-size: 26px; line-height: 1;
   cursor: pointer;
 }
-.ritual { position: relative; width: 200px; height: 200px; }
+.ritual { position: relative; width: 200px; height: 200px; z-index: 2; }
 .ritual .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
 #viewfinder {
-  position: absolute; inset: 0; margin: auto;
-  width: 146px; height: 146px;
-  border-radius: 50%;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
   object-fit: cover;
-  background: transparent;
+  display: none;
+  z-index: 1;
+}
+.capture.video-live #viewfinder { display: block; }
+#wave {
+  position: absolute;
+  bottom: max(28px, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: min(320px, 78vw); height: 46px;
+  z-index: 2;
   display: none;
 }
-#viewfinder.live { display: block; }
+.capture.audio-live #wave { display: block; }
+.cap-toggles {
+  position: absolute;
+  top: max(var(--s3), env(safe-area-inset-top));
+  left: var(--s3);
+  display: flex; gap: var(--s2);
+  z-index: 2;
+}
+.tbtn {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 9px;
+}
+.tbtn.off { opacity: 0.45; }
+.capture.video-live .tbtn { border-color: var(--paper); color: var(--paper); background: rgba(28,26,22,0.3); }
+.linkish {
+  border: none; background: none;
+  color: var(--ink);
+  font-family: var(--mono); font-size: 11px;
+  opacity: 0.7; text-decoration: underline;
+  cursor: pointer;
+}
+.reveal-coin { width: 150px; height: 150px; border-radius: 50%; }
+.reveal-glyphs { display: flex; gap: var(--s4); }
+.reveal-glyphs svg { width: 44px; height: 44px; }
 .intro-title { font-size: 20px; letter-spacing: 0.2em; }
 #introOverlay { gap: calc(var(--s5) * 2); }
 .note { font-size: 12px; opacity: 0.85; text-align: center; max-width: 280px; line-height: 1.6; white-space: pre-line; }

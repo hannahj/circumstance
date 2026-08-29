@@ -1,8 +1,11 @@
+// IndexedDB, with an in-memory fallback so private windows still play (ephemerally)
 const DB_NAME = "circumstance";
+let memory = null;
 
 function open() {
   return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    let req;
+    try { req = indexedDB.open(DB_NAME, 1); } catch (e) { return rej(e); }
     req.onupgradeneeded = () => {
       req.result.createObjectStore("captures", { keyPath: "id", autoIncrement: true });
     };
@@ -10,6 +13,14 @@ function open() {
     req.onerror = () => rej(req.error);
   });
 }
+
+async function getDB() {
+  if (memory) return null;
+  try { return await open(); }
+  catch { memory = { rows: [], next: 1 }; return null; }
+}
+
+export function isEphemeral() { return !!memory; }
 
 function tx(db, mode, fn) {
   return new Promise((res, rej) => {
@@ -21,27 +32,34 @@ function tx(db, mode, fn) {
 }
 
 export async function addCapture(capture) {
-  const db = await open();
+  const db = await getDB();
+  if (!db) { capture.id = memory.next++; memory.rows.push(capture); return capture.id; }
   return tx(db, "readwrite", store => store.add(capture));
 }
 
 export async function putCapture(capture) {
-  const db = await open();
+  const db = await getDB();
+  if (!db) {
+    const i = memory.rows.findIndex(r => r.id === capture.id);
+    if (i >= 0) memory.rows[i] = capture; else memory.rows.push(capture);
+    return capture.id;
+  }
   return tx(db, "readwrite", store => store.put(capture));
 }
 
+export async function deleteCapture(id) {
+  const db = await getDB();
+  if (!db) { memory.rows = memory.rows.filter(r => r.id !== id); return; }
+  return tx(db, "readwrite", store => store.delete(id));
+}
+
 export async function allCaptures() {
-  const db = await open();
-  const db2 = db;
+  const db = await getDB();
+  if (!db) return [...memory.rows];
   return new Promise((res, rej) => {
-    const t = db2.transaction("captures", "readonly");
+    const t = db.transaction("captures", "readonly");
     const req = t.objectStore("captures").getAll();
     req.onsuccess = () => res(req.result);
     req.onerror = () => rej(req.error);
   });
-}
-
-export async function deleteCapture(id) {
-  const db = await open();
-  return tx(db, "readwrite", store => store.delete(id));
 }

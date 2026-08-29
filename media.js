@@ -1,7 +1,14 @@
-// media are encouraged, never required: every path degrades to a data-only capture
-let stream = null;
-let recorder = null;
-let chunks = [];
+// media are encouraged, never required — and each sense is independent
+const LSKEY = "mediaPrefs";
+export function getMediaPrefs() {
+  try { return JSON.parse(localStorage.getItem(LSKEY)) || { video: true, audio: true }; }
+  catch { return { video: true, audio: true }; }
+}
+export function saveMediaPrefs(p) {
+  try { localStorage.setItem(LSKEY, JSON.stringify(p)); } catch {}
+}
+
+let videoStream = null, audioStream = null, recorder = null, chunks = [], ac = null, analyser = null;
 
 function audioMime() {
   if (!window.MediaRecorder) return null;
@@ -10,26 +17,58 @@ function audioMime() {
   return null;
 }
 
-export async function startMedia() {
-  // request each sense independently: one blocked permission must never silence the other
-  let videoStream = null, audioStream = null;
-  try { videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); } catch {}
-  try { audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch {}
-  const tracks = [
-    ...(videoStream ? videoStream.getTracks() : []),
-    ...(audioStream ? audioStream.getTracks() : []),
-  ];
-  stream = tracks.length ? new MediaStream(tracks) : null;
+export async function startVideo() {
+  if (videoStream) return true;
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    return true;
+  } catch { return false; }
+}
 
-  const audioTrack = audioStream && audioStream.getAudioTracks()[0];
-  const mime = audioTrack && audioMime();
-  if (mime) {
-    chunks = [];
-    recorder = new MediaRecorder(new MediaStream([audioTrack]), { mimeType: mime });
-    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-    recorder.start();
+export async function startAudio() {
+  if (recorder) return true;
+  try { audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { return false; }
+  const track = audioStream.getAudioTracks()[0];
+  const mime = track && audioMime();
+  if (!mime) { stopAudio(); return false; }
+  chunks = [];
+  recorder = new MediaRecorder(new MediaStream([track]), { mimeType: mime });
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.start();
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 256;
+  ac.createMediaStreamSource(audioStream).connect(analyser);
+  return true;
+}
+
+export function stopVideo() {
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+}
+
+export function stopAudio() {
+  if (recorder && recorder.state !== "inactive") { try { recorder.stop(); } catch {} }
+  recorder = null; chunks = [];
+  if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
+  if (ac) { ac.close(); ac = null; analyser = null; }
+}
+
+export function videoStreamRef() { return videoStream; }
+export function audioActive() { return !!recorder; }
+
+// live amplitude levels for the waveform (null when no mic is running)
+export function waveLevels(n = 24) {
+  if (!analyser) return null;
+  const d = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(d);
+  const out = [], step = Math.floor(d.length / n);
+  for (let i = 0; i < n; i++) {
+    let m = 0;
+    for (let j = i * step; j < (i + 1) * step; j++) m = Math.max(m, Math.abs(d[j] - 128));
+    out.push(m / 128);
   }
-  return { video: !!videoStream, audio: !!recorder, stream };
+  return out;
 }
 
 export function snapPhoto(videoEl) {
@@ -45,18 +84,23 @@ export function snapPhoto(videoEl) {
   });
 }
 
-export function stopMedia() {
+// seal the sound, stop every sense
+export function finishMedia() {
   return new Promise(res => {
-    const finish = audioBlob => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      stream = null;
-      recorder = null;
-      res(audioBlob);
+    const cleanup = () => {
+      stopVideo();
+      if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
+      if (ac) { ac.close(); ac = null; analyser = null; }
     };
     if (recorder && recorder.state !== "inactive") {
       const mime = recorder.mimeType;
-      recorder.onstop = () => finish(chunks.length ? new Blob(chunks, { type: mime }) : null);
+      recorder.onstop = () => {
+        const b = chunks.length ? new Blob(chunks, { type: mime }) : null;
+        recorder = null; chunks = [];
+        cleanup();
+        res(b);
+      };
       recorder.stop();
-    } else finish(null);
+    } else { recorder = null; cleanup(); res(null); }
   });
 }

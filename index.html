@@ -36,13 +36,24 @@
 Fill it slowly.
 
 Everything you record here — readings, photos, sound — stays on this device. Nothing is uploaded, ever.</div>
-  <button class="read" id="beginBtn">BEGIN</button>
+  <button class="read" id="beginBtn">FIRST<br>READING</button>
+  <button class="linkish" id="skipIntro">or just look around</button>
 </div>
 
-<div class="overlay" id="captureOverlay">
+<div class="overlay" id="revealOverlay">
+  <div class="reveal-coin" id="revealCoin"></div>
+  <div class="reveal-glyphs" id="revealGlyphs"></div>
+</div>
+
+<div class="overlay capture" id="captureOverlay">
+  <video id="viewfinder" autoplay playsinline muted></video>
   <div class="ritual">
-    <video id="viewfinder" autoplay playsinline muted></video>
     <svg class="ring" id="ring" viewBox="-100 -100 200 200"></svg>
+  </div>
+  <canvas id="wave" width="600" height="88"></canvas>
+  <div class="cap-toggles">
+    <button class="tbtn" id="camTog" aria-label="camera"></button>
+    <button class="tbtn" id="micTog" aria-label="microphone"></button>
   </div>
 </div>
 

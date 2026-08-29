@@ -1,8 +1,9 @@
 import { timeBand, sunTimes } from "./sun.js";
 import { fetchWeatherNow, backfillWeather } from "./weather.js";
 import { classifyPlace } from "./classify.js";
-import { addCapture, putCapture, allCaptures, deleteCapture } from "./db.js";
-import { startMedia, snapPhoto, stopMedia } from "./media.js";
+import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
+import { getMediaPrefs, saveMediaPrefs, startVideo, startAudio, stopVideo, stopAudio,
+         videoStreamRef, audioActive, waveLevels, snapPhoto, finishMedia } from "./media.js";
 import { shareCapture } from "./share.js";
 
 // rules
@@ -40,6 +41,11 @@ const FORCE = {
 const MIN_DIST = DEV.has("dist") ? Math.max(0, +DEV.get("dist") || 0) : MIN_DIST_M;
 
 const $ = id => document.getElementById(id);
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const PAPER = "#f4f0e6", INKHEX = "#b6412e";
+const prefs = getMediaPrefs();
+let ritualActive = false;
 let captures = [];
 let lastFix = null;
 let watching = false;
@@ -213,6 +219,49 @@ function renderArc() {
     `<text x="${x2}" y="47" text-anchor="middle" font-size="10" fill="var(--ink)" opacity="0.8" font-family="var(--mono)">${fmt(set)}</text>`;
 }
 
+// ---- capture toggles ----
+const TOG_ICONS = {
+  cam: '<path d="M4 8h4l2-2h4l2 2h4v10H4Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/>',
+  mic: '<rect x="9.5" y="4" width="5" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6.5 11a5.5 5.5 0 0 0 11 0M12 16.5V20M9 20h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+};
+function togSvg(kind, on) {
+  return `<svg viewBox="0 0 24 24" width="100%" height="100%">${TOG_ICONS[kind]}` +
+    (on ? "" : '<path d="M4 3.5L20 20.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>') +
+    "</svg>";
+}
+function updateToggles() {
+  $("camTog").innerHTML = togSvg("cam", prefs.video);
+  $("micTog").innerHTML = togSvg("mic", prefs.audio);
+  $("camTog").classList.toggle("off", !prefs.video);
+  $("micTog").classList.toggle("off", !prefs.audio);
+}
+async function toggleVideo() {
+  prefs.video = !prefs.video;
+  saveMediaPrefs(prefs);
+  updateToggles();
+  if (!ritualActive) return;
+  if (!prefs.video) {
+    stopVideo();
+    $("captureOverlay").classList.remove("video-live");
+    $("viewfinder").srcObject = null;
+  } else if (await startVideo() && ritualActive) {
+    $("viewfinder").srcObject = videoStreamRef();
+    $("captureOverlay").classList.add("video-live");
+  }
+}
+async function toggleAudio() {
+  prefs.audio = !prefs.audio;
+  saveMediaPrefs(prefs);
+  updateToggles();
+  if (!ritualActive) return;
+  if (!prefs.audio) {
+    stopAudio();
+    $("captureOverlay").classList.remove("audio-live");
+  } else if (await startAudio() && ritualActive) {
+    $("captureOverlay").classList.add("audio-live");
+  }
+}
+
 // ---- capture ritual ----
 async function takeReading() {
   startWatch(); // first gesture doubles as the permission moment
@@ -237,17 +286,21 @@ async function takeReading() {
   const overlay = $("captureOverlay");
   const viewfinder = $("viewfinder");
   overlay.classList.add("open");
+  updateToggles();
+  ritualActive = true;
   const t0 = Date.now();
 
   // the countdown hides the technology: fix refines, media rolls, weather and place resolve
   let fix = null, weather = null, place = null;
-  const mediaP = startMedia().then(m => {
-    if (m.video) {
-      viewfinder.srcObject = m.stream;
-      viewfinder.classList.add("live");
+  if (prefs.video) startVideo().then(ok => {
+    if (ok && ritualActive) {
+      viewfinder.srcObject = videoStreamRef();
+      overlay.classList.add("video-live");
     }
-    return m;
-  }).catch(() => ({ video: false, audio: false }));
+  });
+  if (prefs.audio) startAudio().then(ok => {
+    if (ok && ritualActive) overlay.classList.add("audio-live");
+  });
 
   const work = bestFix(RITUAL_MS - 1000).then(async f => {
     fix = f;
@@ -258,27 +311,42 @@ async function takeReading() {
     ]);
   }).catch(() => {});
 
+  const wctx = $("wave").getContext("2d");
   await new Promise(done => {
     (function frame() {
       const t = Math.min(1, (Date.now() - t0) / RITUAL_MS);
       const a = Math.min(t, 0.9999) * 2 * Math.PI; // clockwise from the top
       const x = 80 * Math.sin(a), y = -80 * Math.cos(a);
       const large = a > Math.PI ? 1 : 0;
-      const hasVideo = viewfinder.classList.contains("live");
+      const overVideo = overlay.classList.contains("video-live");
+      const stroke = overVideo ? PAPER : "var(--ink)";
+      const track = overVideo ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
       $("ring").innerHTML =
-        `<circle r="80" fill="none" stroke="var(--ink-wash-12)" stroke-width="3"/>` +
-        (t > 0.01 ? `<path d="M0 -80 A80 80 0 ${large} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>` : "") +
-        (hasVideo ? "" : `<circle r="6" fill="var(--ink)"/>`);
+        `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
+        (t > 0.01 ? `<path d="M0 -80 A80 80 0 ${large} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round"/>` : "") +
+        (overVideo ? "" : `<circle r="6" fill="var(--ink)"/>`);
+
+      // real waveform: drawn only from a live microphone
+      const levels = waveLevels(24);
+      wctx.clearRect(0, 0, 600, 88);
+      if (levels) {
+        wctx.fillStyle = overVideo ? PAPER : INKHEX;
+        const bw = 600 / 24;
+        levels.forEach((v, i) => {
+          const bh = Math.max(5, v * 80);
+          wctx.fillRect(i * bw + bw * 0.25, 44 - bh / 2, bw * 0.5, bh);
+        });
+      }
       if (t < 1) requestAnimationFrame(frame); else done();
     })();
   });
 
   // close of the ring: take the frame, seal the sound
-  const photo = viewfinder.classList.contains("live") ? await snapPhoto(viewfinder) : null;
-  const audio = await stopMedia();
-  viewfinder.classList.remove("live");
+  const photo = (prefs.video && overlay.classList.contains("video-live")) ? await snapPhoto(viewfinder) : null;
+  const audio = await finishMedia();
+  ritualActive = false;
+  overlay.classList.remove("video-live", "audio-live");
   viewfinder.srcObject = null;
-  await mediaP;
   await Promise.race([work, new Promise(r => setTimeout(r, 2000))]);
   overlay.classList.remove("open");
 
@@ -315,8 +383,8 @@ async function takeReading() {
   captures.push(capture);
 
   // one-time note when the reading saw but couldn't hear
-  if (photo && !audio && !localStorage.getItem("micNoteSeen")) {
-    localStorage.setItem("micNoteSeen", "1");
+  if (photo && !audio && prefs.audio && !lsGet("micNoteSeen")) {
+    lsSet("micNoteSeen", "1");
     showNote("This reading has a photo but no sound \u2014 the microphone isn't available to this browser.\n\nIf you want sound in your readings: Settings \u2192 Privacy & Security \u2192 Microphone \u2192 your browser, then allow the site's mic prompt on the next reading.\n\nReadings work fine without it.");
   }
   if (capture.stamped) {
@@ -328,6 +396,17 @@ async function takeReading() {
     else flashStatus("Reading kept, not marked: " + capture.why + ".");
   }
   $("readBtn").disabled = false;
+
+  if (!lsGet("firstRevealSeen")) {
+    lsSet("firstRevealSeen", "1");
+    $("revealCoin").style.background = SKY[capture.band];
+    $("revealGlyphs").innerHTML =
+      (capture.place !== "pending" ? glyph(capture.place, 44) : "") +
+      (capture.weather !== "pending" ? glyph(capture.weather, 44) : "");
+    const ro = $("revealOverlay");
+    ro.classList.add("open");
+    ro.onclick = () => ro.classList.remove("open");
+  }
 
   // if the ritual's fetches land late, keep their answers instead of discarding them
   if (capture.place === "pending" || capture.weather === "pending") {
@@ -513,10 +592,15 @@ function showPhoto(blob) {
     for (const c of dev) await deleteCapture(c.id);
     captures = captures.filter(c => !c.devForced);
   }
-  if (!localStorage.getItem("circIntroSeen")) {
+  if (!lsGet("circIntroSeen")) {
     $("introOverlay").classList.add("open");
     $("beginBtn").addEventListener("click", () => {
-      localStorage.setItem("circIntroSeen", "1");
+      lsSet("circIntroSeen", "1");
+      $("introOverlay").classList.remove("open");
+      takeReading(); // the first reading IS the tutorial
+    });
+    $("skipIntro").addEventListener("click", () => {
+      lsSet("circIntroSeen", "1");
       $("introOverlay").classList.remove("open");
     });
   }
@@ -524,6 +608,11 @@ function showPhoto(blob) {
   renderArc();
   setInterval(renderArc, 60000);
   $("readBtn").addEventListener("click", takeReading);
+  $("camTog").addEventListener("click", toggleVideo);
+  $("micTog").addEventListener("click", toggleAudio);
+  updateToggles();
+  if (isEphemeral())
+    showNote("Private window: readings can be taken but nothing is kept after this tab closes.");
   resolvePending();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
