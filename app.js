@@ -164,10 +164,10 @@ function renderGrid(highlight, opts = {}) {
   } else if (stage === "coins") {
     const { places, weathers } = witnessed();
     grid.style.gridTemplateColumns =
-      `var(--gutter) repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, var(--cellcap))" : "1fr"})`;
-    grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w)).join("");
+      `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+    grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w).replace("<svg ", '<svg class="colg" ')).join("");
     for (const p of places) {
-      grid.insertAdjacentHTML("beforeend", glyph(p));
+      grid.insertAdjacentHTML("beforeend", glyph(p).replace("<svg ", '<svg class="rowg" '));
       for (const w of weathers) {
         const kin = cellStamped(p, w);
         const cell = document.createElement("div");
@@ -190,11 +190,11 @@ function renderGrid(highlight, opts = {}) {
     // deepened, but still growing: only witnessed rows and columns, now subdivided
     const { places: dp, weathers: dw } = witnessed();
     grid.style.gridTemplateColumns =
-      `var(--gutter) repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, var(--cellcap))" : "1fr"})`;
+      `22px repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
     const trig = opts.deepening;
-    grid.innerHTML = "<div></div>" + dw.map(w => glyph(w)).join("");
+    grid.innerHTML = "<div></div>" + dw.map(w => glyph(w).replace("<svg ", '<svg class="colg" ')).join("");
     for (const p of dp) {
-      grid.insertAdjacentHTML("beforeend", glyph(p));
+      grid.insertAdjacentHTML("beforeend", glyph(p).replace("<svg ", '<svg class="rowg" '));
       for (const w of dw) {
         const marks = {};
         for (const c of captures)

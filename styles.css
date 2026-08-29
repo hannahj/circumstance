@@ -12,10 +12,6 @@
   --sky-night: #333c54;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  /* one scale for the whole composition: phone-size up to a deliberate cap */
-  --scale: clamp(1, calc(100vw / 460), 1.45);
-  --gutter: calc(22px * var(--scale));
-  --cellcap: calc(112px * var(--scale));
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 /* nothing paints until the script decides whether the intro shows */
@@ -31,7 +27,7 @@ body {
 }
 .page {
   width: 100%;
-  max-width: calc(430px * var(--scale));
+  max-width: 420px;
   padding: max(var(--s5), env(safe-area-inset-top)) var(--s4) max(var(--s5), env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
@@ -42,18 +38,22 @@ header {
   padding-bottom: var(--s2);
   margin-bottom: var(--s4);
 }
-.title { font-size: calc(15px * var(--scale)); letter-spacing: 0.14em; }
-.counter { font-size: calc(12px * var(--scale)); opacity: 0.75; }
+.title { font-size: 15px; letter-spacing: 0.14em; }
+.counter { font-size: 12px; opacity: 0.75; }
 
 .grid {
   display: grid;
-  grid-template-columns: var(--gutter) repeat(4, 1fr);
+  grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);
   align-items: center;
+  /* only the grid grows on wide screens: it may exceed the text column, up to a cap */
+  width: min(calc(100vw - 32px), 560px);
+  margin-left: 50%;
+  transform: translateX(-50%);
 }
-.grid > svg { justify-self: center; width: var(--gutter); height: var(--gutter); }
+.grid > svg { justify-self: center; }
 /* row-label glyphs hang from the paper's left edge, aligned with the title */
-.grid > svg:nth-child(5n+1) { justify-self: start; }
+.grid > svg.rowg { justify-self: start; }
 .cell {
   aspect-ratio: 1;
   border: 1.5px solid var(--ink);
@@ -79,17 +79,17 @@ footer {
   margin-top: var(--s4);
   gap: var(--s3);
 }
-.almanac { flex: 1; min-width: 0; margin-left: calc(var(--gutter) + var(--s2)); }
+.almanac { flex: 1; min-width: 0; margin-left: 30px; }
 .almanac svg { display: block; width: 100%; }
-.status { font-size: calc(11.5px * var(--scale)); opacity: 0.8; margin-top: var(--s2); min-height: 1.2em; }
+.status { font-size: 11.5px; opacity: 0.8; margin-top: var(--s2); min-height: 1.2em; }
 .read {
-  width: calc(86px * var(--scale)); height: calc(86px * var(--scale)); flex-shrink: 0;
+  width: 86px; height: 86px; flex-shrink: 0;
   border-radius: 50%;
   border: 2.5px solid var(--ink);
   background: transparent;
   color: var(--ink);
   font-family: var(--mono);
-  font-size: calc(12px * var(--scale)); letter-spacing: 0.08em; line-height: 1.3;
+  font-size: 12px; letter-spacing: 0.08em; line-height: 1.3;
   transform: rotate(-4deg);
   cursor: pointer;
 }
@@ -138,11 +138,11 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   border-top: 1px solid var(--ink-wash-45);
   padding-top: var(--s3);
   margin-bottom: var(--s2);
-  margin-left: calc(var(--gutter) + var(--s2));
+  margin-left: 30px;
 }
 .rc-row {
   display: flex; align-items: center; gap: var(--s2);
-  margin-left: calc(var(--gutter) + var(--s2));
+  margin-left: 30px;
   padding: var(--s1) 0;
   font-size: 11.5px;
   opacity: 0.85;
