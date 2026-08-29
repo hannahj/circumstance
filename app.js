@@ -232,7 +232,9 @@ function togSvg(kind, on) {
 function updateToggles() {
   $("camTog").innerHTML = togSvg("cam", prefs.video);
   $("micTog").innerHTML = togSvg("mic", prefs.audio);
+  $("camTog").classList.toggle("on", prefs.video);
   $("camTog").classList.toggle("off", !prefs.video);
+  $("micTog").classList.toggle("on", prefs.audio);
   $("micTog").classList.toggle("off", !prefs.audio);
 }
 async function toggleVideo() {
@@ -267,7 +269,13 @@ async function takeReading() {
   startWatch(); // first gesture doubles as the permission moment
   $("readBtn").disabled = true;
 
-  // trust a live attempt over any query or remembered error
+  const overlay = $("captureOverlay");
+  const viewfinder = $("viewfinder");
+  overlay.classList.add("open");
+  updateToggles();
+  ritualActive = true;
+
+  // trust a live attempt over any query or remembered error — probed beneath the open ritual
   if (!lastFix || Date.now() - lastFix.timestamp > 15000) {
     try {
       lastFix = await new Promise((res, rej) =>
@@ -275,6 +283,8 @@ async function takeReading() {
       geoError = null;
     } catch (e) {
       if (e.code === 1) {
+        ritualActive = false;
+        overlay.classList.remove("open");
         showNote(geoHelp(e));
         $("readBtn").disabled = false;
         return;
@@ -283,11 +293,6 @@ async function takeReading() {
     }
   }
 
-  const overlay = $("captureOverlay");
-  const viewfinder = $("viewfinder");
-  overlay.classList.add("open");
-  updateToggles();
-  ritualActive = true;
   const t0 = Date.now();
 
   // the countdown hides the technology: fix refines, media rolls, weather and place resolve
@@ -586,6 +591,14 @@ function showPhoto(blob) {
 
 // ---- init ----
 (async function init() {
+  if (!lsGet("circIntroSeen")) {
+    $("introOverlay").classList.add("open");
+    $("beginBtn").addEventListener("click", () => {
+      lsSet("circIntroSeen", "1");
+      $("introOverlay").classList.remove("open");
+      takeReading(); // the first reading IS the tutorial
+    });
+  }
   captures = await allCaptures();
   if (DEV.get("purge") === "dev") {
     const dev = captures.filter(c => c.devForced);

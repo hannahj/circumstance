@@ -167,20 +167,15 @@ footer {
   width: 44px; height: 44px;
   border-radius: 50%;
   border: 2px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
   cursor: pointer;
   padding: 9px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.tbtn.off { opacity: 0.45; }
-.capture.video-live .tbtn { border-color: var(--paper); color: var(--paper); background: rgba(28,26,22,0.3); }
-.linkish {
-  border: none; background: none;
-  color: var(--ink);
-  font-family: var(--mono); font-size: 11px;
-  opacity: 0.7; text-decoration: underline;
-  cursor: pointer;
-}
+/* on = inked (pressed stamp); off = outline with slash */
+.tbtn.on { background: var(--ink); color: var(--paper); }
+.tbtn.off { background: transparent; color: var(--ink); opacity: 0.55; }
+.capture.video-live .tbtn.on { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.capture.video-live .tbtn.off { border-color: var(--paper); color: var(--paper); background: rgba(28,26,22,0.3); }
 .reveal-coin { width: 150px; height: 150px; border-radius: 50%; }
 .reveal-glyphs { display: flex; gap: var(--s4); }
 .reveal-glyphs svg { width: 44px; height: 44px; }
