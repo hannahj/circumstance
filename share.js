@@ -1,7 +1,7 @@
 // specimen card: one reading rendered for the outside world (image only — video was too slow)
 const INK = "#b6412e";
 const PAPER = "#f4f0e6";
-const SKYHEX = { dawn: "#dcaab8", day: "#a3c3d6", dusk: "#b8623a", night: "#333c54" };
+const SKYHEX = { dawn: "#e39b78", day: "#ddbe7c", dusk: "#a9707b", night: "#333c54" };
 const GAME_URL = "hannahj.github.io/circumstance";
 const W = 1080, H = 1350;
 

@@ -1,5 +1,5 @@
 // minimal shell cache so the sampler opens offline; network-first so updates land
-const CACHE = "circumstance-v5";
+const CACHE = "circumstance-v6";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "sun.js", "weather.js", "classify.js", "db.js", "media.js", "share.js", "manifest.webmanifest"];
 
 self.addEventListener("install", e => {
@@ -11,7 +11,8 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET" || !e.request.url.startsWith(self.location.origin)) return;
   e.respondWith(
-    fetch(e.request).then(r => {
+    // no-cache: revalidate with the server (ETag 304s are cheap) so deploys land immediately
+    fetch(e.request, { cache: "no-cache" }).then(r => {
       const copy = r.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return r;
