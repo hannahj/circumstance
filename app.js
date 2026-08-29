@@ -366,7 +366,8 @@ async function resolvePending() {
     for (const c of captures) {
       let changed = false;
       if (c.place === "pending") {
-        try { c.place = await classifyPlace(c.lat, c.lon); changed = true; } catch {}
+        try { c.place = await classifyPlace(c.lat, c.lon); changed = true; }
+        catch (e) { if (DEV.has("debug")) flashStatus("place: " + (e.message || e).slice(0, 120)); }
       }
       if (c.weather === "pending") {
         try {
@@ -375,7 +376,7 @@ async function resolvePending() {
           c.weather = w.bucket; c.weatherCode = w.code; c.tempC = w.temp; c.windKmh = w.wind;
           if (w.backfilled) c.weatherBackfilled = true;
           changed = true;
-        } catch {}
+        } catch (e) { if (DEV.has("debug")) flashStatus("weather: " + (e.message || e).slice(0, 120)); }
       }
       if (!c.stamped && !c.why && c.place !== "pending" && c.weather !== "pending") {
         const s = tryStamp(c);
