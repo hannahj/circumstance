@@ -310,14 +310,18 @@ function primeLocation() {
     capPhase("priming");
     $("primeCard").innerHTML =
       '<div>A reading is taken from your location and necessary for the game, but it is only stored on your device.</div>' +
-      '<button class="pill" id="locGo">Allow location</button>' +
-      '<div id="locWait" style="opacity:0.7"></div>';
+      '<button class="pill" id="locGo">Continue</button>' +
+      '<div id="locWait"></div>';
     const go = $("locGo");
     go.addEventListener("click", async () => {
       lsSet("locPrimed", "1");
-      go.disabled = true;
-      $("locWait").textContent = "Locating\u2026";
-      const ok = await tryFix(12000);
+      // our button steps aside: the browser's dialog is the one that grants
+      go.style.display = "none";
+      const pre = await geoPermState();
+      $("locWait").textContent = pre === "granted"
+        ? "Locating\u2026"
+        : "Answer your browser's location request.";
+      const ok = await tryFix(20000);
       if (ok) return res(true);
       const st = await geoPermState();
       if (st === "denied") {
@@ -325,10 +329,10 @@ function primeLocation() {
         showNote(geoHelp({ code: 1 }));
         return res(false);
       }
-      go.disabled = false;
+      go.style.display = "";
       if (st === "prompt") {
-        go.textContent = "Allow location";
-        $("locWait").textContent = "Location permission hasn't been given yet \u2014 tap Allow and answer your browser's prompt.";
+        go.textContent = "Continue";
+        $("locWait").textContent = "Location permission hasn't been given yet \u2014 your browser will ask again.";
       } else {
         go.textContent = "Try again";
         $("locWait").textContent = "No location yet \u2014 open sky helps.";
