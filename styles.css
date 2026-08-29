@@ -1,0 +1,219 @@
+/* Circumstance — tokens per circumstance-design-reference.md */
+:root {
+  --paper: #f4f0e6;
+  --ink: #b6412e;
+  --paper-edge: #d8d2c2;
+  --ink-wash-04: rgba(182,65,46,0.04);
+  --ink-wash-12: rgba(182,65,46,0.12);
+  --ink-wash-45: rgba(182,65,46,0.45);
+  --sky-dawn: #dcaab8;
+  --sky-day: #a3c3d6;
+  --sky-dusk: #b8623a;
+  --sky-night: #333c54;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  display: flex;
+  justify-content: center;
+}
+.page {
+  width: 100%;
+  max-width: 420px;
+  padding: max(var(--s5), env(safe-area-inset-top)) var(--s4) max(var(--s5), env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+}
+header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: var(--s2);
+  margin-bottom: var(--s4);
+}
+.title { font-size: 15px; letter-spacing: 0.14em; }
+.counter { font-size: 12px; opacity: 0.75; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 34px repeat(4, 1fr);
+  gap: var(--s2);
+  align-items: center;
+}
+.grid > svg { justify-self: center; }
+.cell {
+  aspect-ratio: 1;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  padding: var(--s1);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--s1);
+  background: var(--ink-wash-04);
+}
+.cell.complete { background: var(--ink-wash-12); }
+.q { position: relative; width: 100%; height: 100%; }
+.q > div {
+  position: absolute; inset: 0; margin: auto;
+  aspect-ratio: 1; max-width: 100%; max-height: 100%;
+}
+.q.empty > div { border-radius: 50%; border: 1.2px dashed var(--ink-wash-45); }
+.q svg { display: block; width: 100%; height: 100%; }
+
+footer {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: var(--s4);
+  gap: var(--s3);
+}
+.almanac { flex: 1; min-width: 0; margin-left: 42px; }
+.almanac svg { display: block; width: 100%; }
+.status { font-size: 11.5px; opacity: 0.8; margin-top: var(--s2); min-height: 1.2em; }
+.read {
+  width: 86px; height: 86px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 2.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px; letter-spacing: 0.08em; line-height: 1.3;
+  transform: rotate(-4deg);
+  cursor: pointer;
+}
+.read:active, .read:disabled { background: var(--ink-wash-12); }
+
+/* repeat circumstance: readings kept but not marked */
+.repeats { margin-top: var(--s5); }
+.repeats:empty { display: none; }
+.repeats .rc-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  border-top: 1px solid var(--ink-wash-45);
+  padding-top: var(--s3);
+  margin-bottom: var(--s2);
+  margin-left: 42px;
+}
+.rc-row {
+  display: flex; align-items: center; gap: var(--s2);
+  margin-left: 42px;
+  padding: var(--s1) 0;
+  font-size: 11.5px;
+  opacity: 0.85;
+  cursor: pointer;
+}
+.rc-row .coin { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; }
+.rc-row svg { width: 16px; height: 16px; }
+.rc-row .when { opacity: 0.75; margin-left: auto; }
+
+/* overlays: the ritual, a note (errors), a photo viewer */
+.overlay {
+  position: fixed; inset: 0;
+  background: var(--paper);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s4);
+  z-index: 10;
+}
+.overlay.open { display: flex; }
+.overlay .close {
+  position: absolute;
+  top: max(var(--s3), env(safe-area-inset-top));
+  right: var(--s3);
+  width: 44px; height: 44px;
+  border: none; background: none;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 26px; line-height: 1;
+  cursor: pointer;
+}
+.ritual { position: relative; width: 200px; height: 200px; }
+.ritual .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+#viewfinder {
+  position: absolute; inset: 0; margin: auto;
+  width: 146px; height: 146px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: transparent;
+  display: none;
+}
+#viewfinder.live { display: block; }
+.intro-title { font-size: 20px; letter-spacing: 0.2em; }
+#introOverlay { gap: calc(var(--s5) * 2); }
+.note { font-size: 12px; opacity: 0.85; text-align: center; max-width: 280px; line-height: 1.6; white-space: pre-line; }
+#photoFull { max-width: 92vw; max-height: 80vh; border: 1.5px solid var(--ink); border-radius: 4px; }
+
+/* new-mark emphasis: the coin stamps in, a ring radiates once */
+.q.new > div > svg { animation: stampIn 0.5s ease-out; }
+.q.new::after {
+  content: "";
+  position: absolute; inset: 0; margin: auto;
+  aspect-ratio: 1; max-width: 100%; max-height: 100%;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  animation: ringOut 1s ease-out 0.15s forwards;
+  opacity: 0;
+  pointer-events: none;
+}
+@keyframes stampIn {
+  0% { transform: scale(1.7) rotate(-8deg); opacity: 0; }
+  60% { transform: scale(0.94); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes ringOut {
+  0% { transform: scale(0.7); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+/* cell flash for readings that land on existing marks */
+.cell.pulse { animation: cellPulse 1.2s ease-out; }
+@keyframes cellPulse {
+  0% { background: var(--ink-wash-12); }
+  100% { background: var(--ink-wash-04); }
+}
+
+/* cell sheet */
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: var(--paper);
+  border-top: 2px solid var(--ink);
+  padding: var(--s4) var(--s4) max(var(--s4), env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 0.2s ease;
+  z-index: 5;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.sheet.open { transform: none; }
+.sheet-head { display: flex; gap: var(--s3); align-items: center; margin-bottom: var(--s3); }
+.sheet-row { display: flex; gap: var(--s3); align-items: center; padding: var(--s2) 0; font-size: 12px; }
+.sheet-row .coin { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+.sheet-row .when { opacity: 0.75; }
+.sheet-row .grow { flex: 1; }
+.sheet-row .thumb {
+  width: 40px; height: 40px;
+  border-radius: 4px;
+  border: 1.5px solid var(--ink);
+  object-fit: cover;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sheet-row .play {
+  width: 34px; height: 34px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sheet-row .play:active { background: var(--ink-wash-12); }
+.sheet-empty { font-size: 12px; opacity: 0.6; padding: var(--s2) 0; }
