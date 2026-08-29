@@ -293,20 +293,26 @@ async function takeReading() {
     }
   }
 
-  const t0 = Date.now();
-
-  // the countdown hides the technology: fix refines, media rolls, weather and place resolve
-  let fix = null, weather = null, place = null;
-  if (prefs.video) startVideo().then(ok => {
+  // arming: settle each sense in turn, one prompt at a time, before any time runs
+  $("ring").innerHTML =
+    '<circle r="80" fill="none" stroke="var(--ink-wash-12)" stroke-width="3"/>' +
+    '<circle r="6" fill="var(--ink)"/>';
+  if (prefs.video) {
+    const ok = await startVideo();
     if (ok && ritualActive) {
       viewfinder.srcObject = videoStreamRef();
       overlay.classList.add("video-live");
     }
-  });
-  if (prefs.audio) startAudio().then(ok => {
+  }
+  if (prefs.audio) {
+    const ok = await startAudio();
     if (ok && ritualActive) overlay.classList.add("audio-live");
-  });
+  }
+  if (!ritualActive) return; // closed during arming (e.g. location help)
 
+  // only now does the reading begin
+  const t0 = Date.now();
+  let fix = null, weather = null, place = null;
   const work = bestFix(RITUAL_MS - 1000).then(async f => {
     fix = f;
     const { latitude, longitude } = f.coords;
