@@ -279,17 +279,20 @@ function renderCircumstances() {
   if (!rows.length) { box.innerHTML = ""; return; }
   box.innerHTML = '<div class="rc-title">Circumstances</div>';
   for (const c of rows) {
-    const row = document.createElement("div");
-    row.className = "rc-row";
     const pending = c.place === "pending" || c.weather === "pending";
-    const u = photoURL(c);
-    const unplaced = !pending && !c.stamped;
+    const row = document.createElement("div");
+    row.className = "sheet-row";
     row.innerHTML =
-      `<div class="rc-mark${unplaced ? " unplaced" : ""}">` +
-      (u ? `<img src="${u}" alt="">` : `<div class="coin" style="background:${SKY[c.band]}"></div>`) +
-      `</div>` +
+      `<div class="coin${!pending && !c.stamped ? " unplaced" : ""}" style="background:${SKY[c.band]}"></div>` +
       (pending ? "" : glyph(c.place, 18) + glyph(c.weather, 18)) +
-      `<div class="when">${pending ? "resolving\u2026" : relativeDay(c.time)}</div>`;
+      `<div class="when grow">${pending ? "resolving\u2026" : relativeDay(c.time)}</div>`;
+    if (c.photo) {
+      const img = document.createElement("img");
+      img.className = "thumb";
+      img.src = photoURL(c);
+      img.addEventListener("click", e => { e.stopPropagation(); showPhoto(c.photo); });
+      row.appendChild(img);
+    }
     if (c.audio) {
       const btn = document.createElement("button");
       btn.className = "play";
@@ -310,6 +313,16 @@ function renderCircumstances() {
       });
       row.appendChild(up);
     }
+    const share = document.createElement("button");
+    share.className = "play";
+    share.innerHTML = ICON_SHARE;
+    share.addEventListener("click", async e => {
+      e.stopPropagation();
+      share.disabled = true;
+      try { await shareCapture(c); } catch {}
+      share.disabled = false;
+    });
+    row.appendChild(share);
     const del = document.createElement("button");
     del.className = "play";
     del.innerHTML = ICON_TRASH;
@@ -319,7 +332,6 @@ function renderCircumstances() {
       await removeCapture(c);
     });
     row.appendChild(del);
-    if (!pending) row.addEventListener("click", () => openSheet(c.place, c.weather));
     box.appendChild(row);
   }
 }
@@ -706,12 +718,12 @@ async function promoteCapture(c) {
 }
 
 // row action icons: drawn, not typed, so weight and reach are ours to set
-const ICON_SHARE = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_SHARE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 6L18 18M18 6L6 18" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/></svg>';
 
 // ---- cell sheet ----
-const ICON_TRASH = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13M10 10.5v6M14 10.5v6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13M10 10.5v6M14 10.5v6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function buildRows(container, p, w, refresh) {
   container.innerHTML = "";
@@ -725,7 +737,7 @@ function buildRows(container, p, w, refresh) {
     row.innerHTML =
       `<div class="coin" style="background:${SKY[c.band]}"></div>
        <div>${c.band}${c.stamped ? "" : " \u00b7 unmarked"}</div>
-       <div class="when grow">${relativeDay(c.time)}${c.tempC !== undefined ? " \u00b7 " + c.tempC + "\u00b0C" : ""}</div>`;
+       <div class="when grow">${relativeDay(c.time)}</div>`;
     if (c.photo) {
       const img = document.createElement("img");
       img.className = "thumb";
