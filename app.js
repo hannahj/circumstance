@@ -159,29 +159,36 @@ function showNote(text) {
 function showClip(videoBlob) {
   const o = $("photoOverlay");
   const v = $("clipFull");
-  v.src = URL.createObjectURL(videoBlob);
+  const url = URL.createObjectURL(videoBlob);
+  v.src = url;
   o.classList.add("open", "clip");
   v.play().catch(() => {});
   o.onclick = e => {
     if (e.target === v) return;
     v.pause();
     v.removeAttribute("src");
+    URL.revokeObjectURL(url);
     o.classList.remove("open", "clip");
   };
 }
 
 function showPhoto(blob, audioBlob) {
-  $("photoFull").src = URL.createObjectURL(blob);
+  const purl = URL.createObjectURL(blob);
+  $("photoFull").src = purl;
   const o = $("photoOverlay");
   o.classList.add("open");
-  let player = null;
+  let player = null, aurl = null;
   if (audioBlob) {
-    player = new Audio(URL.createObjectURL(audioBlob));
+    aurl = URL.createObjectURL(audioBlob);
+    player = new Audio(aurl);
     player.play().catch(() => {});
   }
   o.onclick = () => {
     o.classList.remove("open");
+    $("photoFull").removeAttribute("src");
+    URL.revokeObjectURL(purl);
     if (player) { player.pause(); player = null; }
+    if (aurl) URL.revokeObjectURL(aurl);
   };
 }
 
@@ -447,6 +454,7 @@ function renderCircumstances() {
     if (c.photo) {
       const img = document.createElement("img");
       img.className = "thumb";
+      img.dataset.id = c.id;
       img.src = photoURL(c);
       img.addEventListener("click", () => c.video ? showClip(c.video) : showPhoto(c.photo, c.audio));
       row.appendChild(img);
@@ -456,7 +464,10 @@ function renderCircumstances() {
       btn.className = "play";
       btn.textContent = "\u25b6";
       btn.addEventListener("click", () => {
-        new Audio(URL.createObjectURL(c.audio)).play().catch(() => {});
+        const u = URL.createObjectURL(c.audio);
+        const a = new Audio(u);
+        a.onended = () => URL.revokeObjectURL(u);
+        a.play().catch(() => URL.revokeObjectURL(u));
       });
       row.appendChild(btn);
     }
@@ -878,6 +889,16 @@ document.addEventListener("visibilitychange", () => {
   renderGrid();
   ping("open");
   $("readBtn").addEventListener("click", takeReading);
+  // image load failures (memory-purged blob URLs) heal themselves from the stored blob
+  document.addEventListener("error", e => {
+    const img = e.target;
+    if (!img || img.tagName !== "IMG" || !img.dataset || !img.dataset.id) return;
+    const c = captures.find(x => String(x.id) === img.dataset.id);
+    if (!c || !c.photo || img.dataset.healed) return;
+    img.dataset.healed = "1"; // one retry, no loops
+    thumbURLs.delete(c.id);
+    img.src = photoURL(c);
+  }, true);
   $("grid").addEventListener("click", e => {
     const img = e.target.closest && e.target.closest("img[data-id]");
     if (!img) return;
