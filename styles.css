@@ -34,10 +34,13 @@ body {
   flex-direction: column;
 }
 header {
-  display: flex; justify-content: space-between; align-items: baseline;
-  margin-top: var(--s4);
+  display: flex; justify-content: space-between; align-items: center;
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+  padding-block: var(--s3);
+  background: var(--paper2);
 }
-.brand { font-size: 14px; font-weight: 500; letter-spacing: 0.12em; }
+.brand { font-size: 16px; font-weight: 600; letter-spacing: 0.12em; }
 .devbadge { font-size: 11px; margin-left: var(--s2); }
 .devbadge:empty { display: none; }
 header {
@@ -50,7 +53,7 @@ header {
 .counter { font-size: 12px; }
 
 .grid {
-  margin-top: var(--s5);
+  margin-top: var(--s3);
   display: grid;
   grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);
@@ -126,16 +129,12 @@ footer {
   text-align: center;
   line-height: 1.7;
 }
-.settings {
-  display: flex; align-items: center; gap: var(--s2);
-  font-size: 12px;
-}
+.settings { display: flex; align-items: center; gap: var(--s3); }
 .settings button {
-  background: none; border: none; padding: var(--s1);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.06em;
+  -webkit-appearance: none;
+  appearance: none;
+  background: none; border: none; padding: 2px;
+  display: inline-grid; place-items: center;
   cursor: pointer;
 }
 .menu { display: flex; flex-direction: column; }
@@ -204,7 +203,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 }
 .repeats { margin-top: 0; }
 .repeats .rc-title {
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
