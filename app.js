@@ -334,7 +334,7 @@ function landStamp(c) {
 }
 
 // a one-line anchored tip that dismisses itself
-function showTip(anchor, html) {
+function showTip(anchor, html, ms = 3200) {
   document.querySelectorAll(".tip").forEach(t => t.remove());
   const tip = document.createElement("div");
   tip.className = "tip";
@@ -345,21 +345,20 @@ function showTip(anchor, html) {
   tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + "px";
   const dismiss = () => { tip.remove(); document.removeEventListener("pointerdown", dismiss, true); };
   setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 50);
-  setTimeout(dismiss, 3200);
+  setTimeout(dismiss, ms);
 }
 
 // ---- the circumstances list: every recording, always up ----
 const INFO_TEXT =
-  "A recorder for unique circumstances \u2014 where you stand, what the sky is doing, the hour.\n\n" +
-  "Each recording keeps ten seconds of sound and a photograph.\n\n" +
-  "Everything stays on your device. Nothing is uploaded. To read the sky and surroundings, " +
-  "your coordinates are checked against public weather and map services \u2014 with nothing about you attached.";
+  "Record unique circumstances, based on time, location, and weather.\n\n" +
+  "Recordings include ten seconds of sound and one photograph and are only stored on your device.";
 
 function renderCircumstances() {
   const box = $("repeats");
   const rows = [...captures].sort((a, b) => a.time < b.time ? 1 : -1);
   box.innerHTML = '<div class="rc-title">Circumstances <button class="info" aria-label="about">i</button></div>';
-  box.querySelector(".info").addEventListener("click", () => showNote(INFO_TEXT));
+  const infoBtn = box.querySelector(".info");
+  infoBtn.addEventListener("click", e => { e.stopPropagation(); showTip(infoBtn, INFO_TEXT, 12000); });
   for (const c of rows) {
     const pending = c.place === "pending" || c.weather === "pending";
     const row = document.createElement("div");
