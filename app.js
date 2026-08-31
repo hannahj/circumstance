@@ -81,11 +81,23 @@ if (navigator.permissions?.query) {
     };
   }).catch(() => {});
 }
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible") return;
-  if (geoError) { watching = false; startWatch(); }
-  resolvePending();
-});
+
+async function geoPermState() {
+  try { return (await navigator.permissions.query({ name: "geolocation" })).state; }
+  catch { return "unknown"; }
+}
+
+// a genuine attempt at a fix; sets geoError on failure
+async function tryFix(timeoutMs) {
+  if (lastFix && Date.now() - lastFix.timestamp < 15000) return true;
+  try {
+    lastFix = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { timeout: timeoutMs, maximumAge: 60000 }));
+    geoError = null;
+    if (watchId === null) { watching = false; startWatch(); }
+    return true;
+  } catch (e) { geoError = e; return false; }
+}
 
 async function bestFix(timeoutMs) {
   if (lastFix && Date.now() - lastFix.timestamp < 15000) return lastFix;
@@ -101,6 +113,21 @@ async function bestFix(timeoutMs) {
   }
 }
 
+function distM(aLat, aLon, bLat, bLon) {
+  const mLat = 111320;
+  const mLon = 111320 * Math.cos(aLat * Math.PI / 180);
+  return Math.hypot((bLat - aLat) * mLat, (bLon - aLon) * mLon);
+}
+
+function relativeDay(iso) {
+  const d = new Date(iso), now = new Date();
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = (day(now) - day(d)) / 86400000;
+  if (diff === 0) return "today";
+  if (diff === 1) return "yesterday";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function geoHelp(e) {
   if (e && e.code === 1)
     return "Location is switched off for this browser, so a reading can't be taken.\n\n" +
@@ -111,22 +138,80 @@ function geoHelp(e) {
   return "Couldn't get a location fix. Try again in a moment.";
 }
 
-// ---- geometry ----
-function distM(aLat, aLon, bLat, bLon) {
-  const mLat = 111320;
-  const mLon = 111320 * Math.cos(aLat * Math.PI / 180);
-  return Math.hypot((bLat - aLat) * mLat, (bLon - aLon) * mLon);
+let statusTimer = null;
+function flashStatus(text) {
+  $("status").textContent = text;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => renderGrid(), 6000);
 }
 
-// ---- stamping rules ----
+function showNote(text) {
+  $("noteText").textContent = text;
+  const o = $("noteOverlay");
+  o.classList.add("open");
+  o.onclick = () => o.classList.remove("open");
+}
+
+function showPhoto(blob) {
+  $("photoFull").src = URL.createObjectURL(blob);
+  const o = $("photoOverlay");
+  o.classList.add("open");
+  o.onclick = () => o.classList.remove("open");
+}
+
+const ICON_SHARE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13M10 10.5v6M14 10.5v6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+
+// ---- rules: one place, one mark ----
 function tryStamp(capture, ignoreId) {
-  // one place, one mark — anywhere on the grid
   const marks = captures.filter(c => c.stamped && c.id !== ignoreId);
   if (marks.some(c => c.place === capture.place && c.weather === capture.weather && c.band === capture.band))
     return { stamped: false, why: "already marked" };
   if (marks.some(c => distM(c.lat, c.lon, capture.lat, capture.lon) < MIN_DIST))
     return { stamped: false, why: "too near an earlier mark" };
   return { stamped: true };
+}
+
+async function reEvaluateAll() {
+  const waiting = captures
+    .filter(x => !x.stamped && x.why && x.place !== "pending" && x.weather !== "pending")
+    .sort((a, b) => a.time < b.time ? -1 : 1);
+  let promoted = null;
+  for (const x of waiting) {
+    x.why = undefined;
+    const s = tryStamp(x);
+    x.stamped = s.stamped;
+    x.why = s.why;
+    await putCapture(x);
+    if (x.stamped && !promoted) promoted = x;
+  }
+  return promoted;
+}
+
+async function removeCapture(c) {
+  await deleteCapture(c.id);
+  captures = captures.filter(x => x.id !== c.id);
+  const promoted = await reEvaluateAll();
+  if (promoted) landStamp(promoted); else renderGrid();
+}
+
+async function promoteCapture(c) {
+  const occupant = captures.find(x =>
+    x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
+  const s = tryStamp(c, occupant ? occupant.id : undefined);
+  if (!s.stamped) { flashStatus("Can't swap in: " + s.why + "."); return false; }
+  if (occupant) {
+    occupant.stamped = false;
+    occupant.why = "swapped out";
+    await putCapture(occupant);
+  }
+  c.stamped = true;
+  c.why = undefined;
+  await putCapture(c);
+  landStamp(c);
+  return true;
 }
 
 // ---- rendering: the grid grows toward what the player witnesses ----
@@ -166,81 +251,59 @@ function renderGrid(highlight, opts = {}) {
   const grid = $("grid");
   const stage = opts.forceStage || gridStage();
   grid.classList.toggle("seed", stage === "seed");
-  grid.classList.remove("wide", "young");
   grid.classList.toggle("deepening", !!opts.deepening);
+  grid.classList.remove("wide", "young");
 
   if (stage === "seed") {
-    // one unlabeled mystery circle: the grid waits to be planted
     grid.style.gridTemplateColumns = "1fr";
-    grid.style.maxWidth = "";
     grid.innerHTML = '<div class="seedwrap"><div class="seedcircle"></div></div>';
-  } else if (stage === "coins") {
+  } else {
     const { places, weathers } = witnessed();
-    grid.style.gridTemplateColumns =
-      `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
     grid.classList.toggle("wide", weathers.length === 4);
     grid.classList.toggle("young", weathers.length <= 2);
+    grid.style.gridTemplateColumns =
+      `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+    const trig = opts.deepening;
     grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w).replace("<svg ", '<svg class="colg" ')).join("");
     for (const p of places) {
       grid.insertAdjacentHTML("beforeend", glyph(p).replace("<svg ", '<svg class="rowg" '));
       for (const w of weathers) {
-        const kin = cellStamped(p, w);
         const cell = document.createElement("div");
-        cell.className = "cell mono";
-        const isNew = highlight && highlight.place === p && highlight.weather === w;
-        if (kin.length) {
-          cell.innerHTML =
-            `<div class="q${isNew && highlight.band ? " new" : ""}"><div>` +
-            markHTML(kin[0]) +
-            `</div></div>`;
+        if (stage === "coins") {
+          const kin = cellStamped(p, w);
+          cell.className = "cell mono";
+          const isNew = highlight && highlight.place === p && highlight.weather === w;
+          cell.innerHTML = kin.length
+            ? `<div class="q${isNew && highlight.band ? " new" : ""}"><div>${markHTML(kin[0])}</div></div>`
+            : '<div class="q empty"><div></div></div>';
+          if (highlight && highlight.pulse && isNew) cell.classList.add("pulse");
         } else {
-          cell.innerHTML = '<div class="q empty"><div></div></div>';
-        }
-        if (highlight && highlight.pulse && isNew) cell.classList.add("pulse");
-        cell.addEventListener("click", () => openSheet(p, w));
-        grid.appendChild(cell);
-      }
-    }
-  } else {
-    // deepened, but still growing: only witnessed rows and columns, now subdivided
-    const { places: dp, weathers: dw } = witnessed();
-    grid.style.gridTemplateColumns =
-      `22px repeat(${dw.length}, ${dw.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
-    const trig = opts.deepening;
-    grid.classList.toggle("wide", dw.length === 4);
-    grid.classList.toggle("young", dw.length <= 2);
-    grid.innerHTML = "<div></div>" + dw.map(w => glyph(w).replace("<svg ", '<svg class="colg" ')).join("");
-    for (const p of dp) {
-      grid.insertAdjacentHTML("beforeend", glyph(p).replace("<svg ", '<svg class="rowg" '));
-      for (const w of dw) {
-        const marks = {};
-        for (const c of captures)
-          if (c.stamped && c.place === p && c.weather === w) marks[c.band] = c;
-        const cell = document.createElement("div");
-        cell.className = "cell" + (BANDS.every(b => marks[b]) ? " complete" : "");
-        if (trig) {
-          // the bloom washes outward from the cell that earned it
-          const pr = dp.indexOf(p) - dp.indexOf(trig.place);
-          const wc = dw.indexOf(w) - dw.indexOf(trig.weather);
-          cell.style.setProperty("--bloom-delay", (Math.hypot(pr, wc) * 90).toFixed(0) + "ms");
-        }
-        BANDS.forEach((b, qi) => {
-          const q = document.createElement("div");
-          const isNew = highlight && highlight.place === p && highlight.weather === w && highlight.band === b;
-          q.className = "q" + (marks[b] ? "" : " empty") + (isNew ? " new" : "");
-          if (trig && marks[b]) {
-            q.classList.add("settle");
-            q.style.setProperty("--sx", (qi % 2 ? "-54%" : "54%"));
-            q.style.setProperty("--sy", (qi > 1 ? "-54%" : "54%"));
+          const marks = {};
+          for (const c of captures)
+            if (c.stamped && c.place === p && c.weather === w) marks[c.band] = c;
+          cell.className = "cell" + (BANDS.every(b => marks[b]) ? " complete" : "");
+          if (trig) {
+            const pr = places.indexOf(p) - places.indexOf(trig.place);
+            const wc = weathers.indexOf(w) - weathers.indexOf(trig.weather);
+            cell.style.setProperty("--bloom-delay", (Math.hypot(pr, wc) * 90).toFixed(0) + "ms");
           }
-          const inner = document.createElement("div");
-          if (marks[b]) inner.innerHTML = markHTML(marks[b]);
-          q.appendChild(inner);
-          cell.appendChild(q);
-        });
-        if (highlight && highlight.pulse && highlight.place === p && highlight.weather === w)
-          cell.classList.add("pulse");
-        cell.addEventListener("click", () => openSheet(p, w));
+          BANDS.forEach((b, qi) => {
+            const q = document.createElement("div");
+            const isNew = highlight && highlight.place === p && highlight.weather === w && highlight.band === b;
+            q.className = "q" + (marks[b] ? "" : " empty") + (isNew ? " new" : "");
+            if (trig && marks[b]) {
+              q.classList.add("settle");
+              q.style.setProperty("--sx", (qi % 2 ? "-54%" : "54%"));
+              q.style.setProperty("--sy", (qi > 1 ? "-54%" : "54%"));
+            }
+            const inner = document.createElement("div");
+            if (marks[b]) inner.innerHTML = markHTML(marks[b]);
+            q.appendChild(inner);
+            cell.appendChild(q);
+          });
+          if (highlight && highlight.pulse && highlight.place === p && highlight.weather === w)
+            cell.classList.add("pulse");
+        }
         grid.appendChild(cell);
       }
     }
@@ -252,13 +315,12 @@ function renderGrid(highlight, opts = {}) {
   renderCircumstances();
 }
 
-// a stamp lands: bud, mark — or deepen
+// a stamp lands: bud, mark \u2014 or deepen
 function landStamp(c) {
   const wasDeep = lsGet("deepened");
   const doubled = cellStamped(c.place, c.weather).length >= 2;
   if (!wasDeep && doubled) {
     lsSet("deepened", "1");
-    // held beat on the familiar page, then the whole grid subdivides at once
     renderGrid({ place: c.place, weather: c.weather, pulse: true, band: c.band }, { forceStage: "coins" });
     document.body.classList.add("hush");
     setTimeout(() => {
@@ -273,6 +335,7 @@ function landStamp(c) {
   }
 }
 
+// ---- the circumstances list: every recording, always up ----
 function renderCircumstances() {
   const box = $("repeats");
   const rows = [...captures].sort((a, b) => a.time < b.time ? 1 : -1);
@@ -290,15 +353,14 @@ function renderCircumstances() {
       const img = document.createElement("img");
       img.className = "thumb";
       img.src = photoURL(c);
-      img.addEventListener("click", e => { e.stopPropagation(); showPhoto(c.photo); });
+      img.addEventListener("click", () => showPhoto(c.photo));
       row.appendChild(img);
     }
     if (c.audio) {
       const btn = document.createElement("button");
       btn.className = "play";
       btn.textContent = "\u25b6";
-      btn.addEventListener("click", e => {
-        e.stopPropagation();
+      btn.addEventListener("click", () => {
         new Audio(URL.createObjectURL(c.audio)).play().catch(() => {});
       });
       row.appendChild(btn);
@@ -307,17 +369,13 @@ function renderCircumstances() {
       const up = document.createElement("button");
       up.className = "play";
       up.innerHTML = ICON_PROMOTE;
-      up.addEventListener("click", async e => {
-        e.stopPropagation();
-        await promoteCapture(c);
-      });
+      up.addEventListener("click", () => promoteCapture(c));
       row.appendChild(up);
     }
     const share = document.createElement("button");
     share.className = "play";
     share.innerHTML = ICON_SHARE;
-    share.addEventListener("click", async e => {
-      e.stopPropagation();
+    share.addEventListener("click", async () => {
       share.disabled = true;
       try { await shareCapture(c); } catch {}
       share.disabled = false;
@@ -326,8 +384,7 @@ function renderCircumstances() {
     const del = document.createElement("button");
     del.className = "play";
     del.innerHTML = ICON_TRASH;
-    del.addEventListener("click", async e => {
-      e.stopPropagation();
+    del.addEventListener("click", async () => {
       if (!confirm("Delete this recording? Its photo and sound go with it.")) return;
       await removeCapture(c);
     });
@@ -335,23 +392,6 @@ function renderCircumstances() {
     box.appendChild(row);
   }
 }
-
-let statusTimer = null;
-function flashStatus(text) {
-  $("status").textContent = text;
-  clearTimeout(statusTimer);
-  statusTimer = setTimeout(() => renderGrid(), 6000);
-}
-
-function relativeDay(iso) {
-  const d = new Date(iso), now = new Date();
-  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = (day(now) - day(d)) / 86400000;
-  if (diff === 0) return "today";
-  if (diff === 1) return "yesterday";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
 
 // ---- ritual phases ----
 let cancelFns = [];
@@ -369,23 +409,6 @@ function endRitual() {
   o.classList.remove("open", "video-live", "audio-live", "priming", "ready", "reading");
   $("viewfinder").srcObject = null;
   $("readBtn").disabled = false;
-}
-
-async function geoPermState() {
-  try { return (await navigator.permissions.query({ name: "geolocation" })).state; }
-  catch { return "unknown"; }
-}
-
-// a genuine attempt at a fix; sets geoError on failure
-async function tryFix(timeoutMs) {
-  if (lastFix && Date.now() - lastFix.timestamp < 15000) return true;
-  try {
-    lastFix = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { timeout: timeoutMs, maximumAge: 60000 }));
-    geoError = null;
-    if (watchId === null) { watching = false; startWatch(); }
-    return true;
-  } catch (e) { geoError = e; return false; }
 }
 
 // hard gate, silent when it works: words appear only on failure
@@ -437,7 +460,7 @@ function readyPhase() {
     const wctx = $("wave").getContext("2d");
     let settled = false;
     const down = e => {
-      if (settled || e.target.closest(".tbtn") || e.target.closest(".close")) return;
+      if (settled || e.target.closest(".close")) return;
       settled = true;
       cleanup();
       res(true);
@@ -459,11 +482,11 @@ function readyPhase() {
   });
 }
 
-// ---- capture ritual ----
+// ---- the recording ----
 async function takeReading() {
+  if (ritualActive) return;
   startWatch(); // first gesture doubles as the permission moment
   $("readBtn").disabled = true;
-
   const overlay = $("captureOverlay");
   const viewfinder = $("viewfinder");
   overlay.classList.add("open");
@@ -498,7 +521,7 @@ async function takeReading() {
     ]);
   }).catch(() => {});
 
-  // ready: the player frames, listens, and presses the stamp when they choose
+  // ready: the player frames, listens, and taps when they choose
   if (!await readyPhase()) return;
   if (!ritualActive) return;
 
@@ -536,30 +559,32 @@ async function takeReading() {
   overlay.classList.remove("open");
 
   if (!fix) {
-    showNote(geoHelp(geoError));
-    $("readBtn").disabled = false;
-    return;
+    fix = lastFix;
+    if (!fix) {
+      showNote(geoHelp(geoError || { code: 3 }));
+      $("readBtn").disabled = false;
+      return;
+    }
   }
 
-  const { latitude: lat, longitude: lon, accuracy } = fix.coords;
-  const tb = timeBand(lat, lon, new Date());
+  const now = new Date();
   const capture = {
-    time: new Date().toISOString(),
-    lat: +lat.toFixed(6), lon: +lon.toFixed(6),
-    accuracy: Math.round(accuracy),
-    roughFix: accuracy > GOOD_FIX_M || undefined,
-    band: tb.band, sunElev: tb.elev,
+    time: now.toISOString(),
+    lat: fix.coords.latitude,
+    lon: fix.coords.longitude,
+    band: timeBand(fix.coords.latitude, fix.coords.longitude, now),
+    photo, audio,
     weather: weather ? weather.bucket : "pending",
     weatherCode: weather?.code, tempC: weather?.temp, windKmh: weather?.wind,
     place: place || "pending",
     stamped: false,
   };
   if (capture0Evidence) capture.placeEvidence = capture0Evidence;
+  if (weather?.backfilled) capture.weatherBackfilled = true;
   if (FORCE.weather) { capture.weather = FORCE.weather; capture.devForced = true; }
   if (FORCE.place) { capture.place = FORCE.place; capture.devForced = true; }
   if (FORCE.band) { capture.band = FORCE.band; capture.devForced = true; }
-  if (photo) capture.photo = photo;
-  if (audio) { capture.audio = audio; capture.audioType = audio.type; }
+
   if (capture.place !== "pending" && capture.weather !== "pending") {
     const s = tryStamp(capture);
     capture.stamped = s.stamped;
@@ -568,30 +593,13 @@ async function takeReading() {
   capture.id = await addCapture(capture);
   captures.push(capture);
 
-  if (capture.stamped) {
-    landStamp(capture);
-  } else {
-    const known = capture.place !== "pending" && capture.weather !== "pending";
-    renderGrid(known ? { place: capture.place, weather: capture.weather, pulse: true } : undefined);
-    if (!known) flashStatus("Reading kept \u00b7 resolving\u2026");
-    else flashStatus("Reading kept, not marked: " + capture.why + ".");
+  if (capture.stamped) landStamp(capture);
+  else {
+    renderGrid();
+    if (capture.why) flashStatus("Kept \u00b7 " + capture.why);
+    else flashStatus("Recorded \u00b7 resolving\u2026");
   }
   $("readBtn").disabled = false;
-
-  if (DEV.has("label")) {
-    const note = $("noteOverlay"), txt = $("noteText");
-    txt.innerHTML = '<div style="margin-bottom:10px">Your call:</div>' +
-      '<div style="display:flex;gap:14px;justify-content:center">' +
-      PLACES.map(p => `<button class="tbtn on" data-hp="${p}" style="width:52px;height:52px">${glyph(p, 30)}</button>`).join("") +
-      "</div>";
-    note.classList.add("open");
-    note.onclick = async e => {
-      const b = e.target.closest("[data-hp]");
-      if (b) { capture.humanPlace = b.dataset.hp; await putCapture(capture); }
-      note.classList.remove("open");
-      note.onclick = null;
-    };
-  }
 
   if (!lsGet("firstRevealSeen")) {
     lsSet("firstRevealSeen", "1");
@@ -609,217 +617,64 @@ async function takeReading() {
     };
   }
 
-  // if the ritual's fetches land late, keep their answers instead of discarding them
-  if (capture.place === "pending" || capture.weather === "pending") {
-    work.then(async () => {
-      let changed = false;
-      if (capture.place === "pending" && place) { capture.place = place; capture.placeEvidence = capture0Evidence; changed = true; }
-      if (capture.weather === "pending" && weather) {
-        capture.weather = weather.bucket; capture.weatherCode = weather.code;
-        capture.tempC = weather.temp; capture.windKmh = weather.wind;
-        changed = true;
+  // if the ritual's fetches land late, the answers are still kept
+  work.then(async () => {
+    let changed = false;
+    if (capture.place === "pending" && place) { capture.place = place; capture.placeEvidence = capture0Evidence; changed = true; }
+    if (capture.weather === "pending" && weather) {
+      capture.weather = weather.bucket;
+      capture.weatherCode = weather.code; capture.tempC = weather.temp; capture.windKmh = weather.wind;
+      changed = true;
+    }
+    if (changed) {
+      if (!capture.stamped && !capture.why && capture.place !== "pending" && capture.weather !== "pending") {
+        const s = tryStamp(capture);
+        capture.stamped = s.stamped;
+        capture.why = s.why;
       }
-      if (changed) {
-        if (capture.place !== "pending" && capture.weather !== "pending" && !capture.stamped && !capture.why) {
-          const st = tryStamp(capture);
-          capture.stamped = st.stamped;
-          capture.why = st.why;
-        }
-        await putCapture(capture);
-        if (capture.stamped)
-          landStamp(capture);
-        else {
-          renderGrid();
-          if (capture.place !== "pending" && capture.weather !== "pending" && capture.why)
-            flashStatus("Reading kept, not marked: " + capture.why + ".");
-        }
-      }
-    });
-    setTimeout(resolvePending, 15000);
-  }
+      await putCapture(capture);
+      if (capture.stamped) landStamp(capture); else renderGrid();
+    }
+  });
 }
 
 // ---- pending resolution ----
-let resolving = false;
 async function resolvePending() {
-  if (resolving) return;
-  resolving = true;
-  try {
-    for (const c of captures) {
-      let changed = false;
-      if (c.place === "pending") {
-        try { c.place = await classifyPlace(c.lat, c.lon); c.placeEvidence = takeEvidence(); changed = true; }
-        catch (e) { if (DEV.has("debug")) flashStatus("place: " + (e.message || e).slice(0, 120)); }
-      }
-      if (c.weather === "pending") {
-        try {
-          const recent = Date.now() - new Date(c.time).getTime() < 30 * 60000;
-          const w = recent ? await fetchWeatherNow(c.lat, c.lon) : await backfillWeather(c.lat, c.lon, c.time);
-          c.weather = w.bucket; c.weatherCode = w.code; c.tempC = w.temp; c.windKmh = w.wind;
-          if (w.backfilled) c.weatherBackfilled = true;
-          changed = true;
-        } catch (e) { if (DEV.has("debug")) flashStatus("weather: " + (e.message || e).slice(0, 120)); }
-      }
-      if (!c.stamped && !c.why && c.place !== "pending" && c.weather !== "pending") {
+  for (const c of captures) {
+    if (c.place !== "pending" && c.weather !== "pending") continue;
+    let changed = false;
+    if (c.place === "pending") {
+      try { c.place = await classifyPlace(c.lat, c.lon); c.placeEvidence = takeEvidence(); changed = true; }
+      catch (e) { if (DEV.has("debug")) flashStatus("place: " + (e.message || e).slice(0, 120)); }
+    }
+    if (c.weather === "pending") {
+      try {
+        const w = await fetchWeatherNow(c.lat, c.lon, c.time);
+        c.weather = w.bucket; c.weatherCode = w.code; c.tempC = w.temp; c.windKmh = w.wind;
+        if (w.backfilled) c.weatherBackfilled = true;
+        changed = true;
+      } catch (e) { if (DEV.has("debug")) flashStatus("weather: " + (e.message || e).slice(0, 120)); }
+    }
+    if (changed && c.place !== "pending" && c.weather !== "pending") {
+      if (!c.stamped && !c.why) {
         const s = tryStamp(c);
         c.stamped = s.stamped;
         c.why = s.why;
-        changed = true;
         if (!c.stamped) flashStatus("Kept \u00b7 " + c.why);
       }
-      if (changed) {
-        await putCapture(c);
-        if (c.stamped) landStamp(c); else renderGrid();
-      }
+      await putCapture(c);
+      if (c.stamped) landStamp(c); else renderGrid();
+    } else if (changed) {
+      await putCapture(c);
+      renderGrid();
     }
-  } finally { resolving = false; }
-}
-
-async function removeCapture(c) {
-  await deleteCapture(c.id);
-  captures = captures.filter(x => x.id !== c.id);
-  const promoted = await reEvaluateAll();
-  if (promoted) landStamp(promoted); else renderGrid();
-}
-
-// a freed location can seat refused readings anywhere on the grid, oldest first
-async function reEvaluateAll() {
-  const waiting = captures
-    .filter(x => !x.stamped && x.why && x.place !== "pending" && x.weather !== "pending")
-    .sort((a, b) => a.time < b.time ? -1 : 1);
-  let promoted = null;
-  for (const x of waiting) {
-    x.why = undefined;
-    const s = tryStamp(x);
-    x.stamped = s.stamped;
-    x.why = s.why;
-    await putCapture(x);
-    if (x.stamped && !promoted) promoted = x;
-  }
-  return promoted;
-}
-
-// swap a kept reading onto the grid: the displaced mark becomes a repeat
-async function promoteCapture(c) {
-  const occupant = captures.find(x =>
-    x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
-  const s = tryStamp(c, occupant ? occupant.id : undefined);
-  if (!s.stamped) { flashStatus("Can't swap in: " + s.why + "."); return false; }
-  if (occupant) {
-    occupant.stamped = false;
-    occupant.why = "swapped out";
-    await putCapture(occupant);
-  }
-  c.stamped = true;
-  c.why = undefined;
-  await putCapture(c);
-  landStamp(c);
-  return true;
-}
-
-// row action icons: drawn, not typed, so weight and reach are ours to set
-const ICON_SHARE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 6L18 18M18 6L6 18" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/></svg>';
-
-// ---- cell sheet ----
-const ICON_TRASH = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13M10 10.5v6M14 10.5v6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-
-function buildRows(container, p, w, refresh) {
-  container.innerHTML = "";
-  const rows = captures
-    .filter(c => c.place === p && c.weather === w)
-    .sort((a, b) => a.time < b.time ? 1 : -1);
-  if (!rows.length) container.innerHTML = '<div class="sheet-empty">Nothing here yet.</div>';
-  for (const c of rows) {
-    const row = document.createElement("div");
-    row.className = "sheet-row";
-    row.innerHTML =
-      `<div class="coin" style="background:${SKY[c.band]}"></div>
-       <div>${c.band}${c.stamped ? "" : " \u00b7 unmarked"}</div>
-       <div class="when grow">${relativeDay(c.time)}</div>`;
-    if (c.photo) {
-      const img = document.createElement("img");
-      img.className = "thumb";
-      img.src = URL.createObjectURL(c.photo);
-      img.addEventListener("click", e => { e.stopPropagation(); showPhoto(c.photo); });
-      row.appendChild(img);
-    }
-    if (c.audio) {
-      const btn = document.createElement("button");
-      btn.className = "play";
-      btn.textContent = "\u25b6";
-      btn.addEventListener("click", e => {
-        e.stopPropagation();
-        new Audio(URL.createObjectURL(c.audio)).play().catch(() => {});
-      });
-      row.appendChild(btn);
-    }
-    if (!c.stamped && c.why && c.place !== "pending" && c.weather !== "pending") {
-      const up = document.createElement("button");
-      up.className = "play";
-      up.innerHTML = ICON_PROMOTE;
-      up.addEventListener("click", async e => {
-        e.stopPropagation();
-        if (await promoteCapture(c)) refresh();
-      });
-      row.appendChild(up);
-    }
-    const share = document.createElement("button");
-    share.className = "play";
-    share.innerHTML = ICON_SHARE;
-    share.addEventListener("click", async e => {
-      e.stopPropagation();
-      share.disabled = true;
-      try { await shareCapture(c); } catch {}
-      share.disabled = false;
-    });
-    row.appendChild(share);
-    const del = document.createElement("button");
-    del.className = "play";
-    del.innerHTML = ICON_TRASH;
-    del.addEventListener("click", async e => {
-      e.stopPropagation();
-      if (!confirm("Delete this recording? Its photo and sound go with it.")) return;
-      await removeCapture(c);
-      refresh();
-    });
-    row.appendChild(del);
-    container.appendChild(row);
   }
 }
-
-function openSheet(p, w) {
-  const sheet = $("cellSheet");
-  $("sheetHead").innerHTML = glyph(p) + glyph(w);
-  buildRows($("sheetBody"), p, w, () => openSheet(p, w));
-  sheet.classList.add("open");
-}
-
-
-// one permanent close handler: taps outside close the sheet,
-// taps on another cell or repeat row switch it instead
-document.addEventListener("click", e => {
-  const sheet = $("cellSheet");
-  if (!sheet.classList.contains("open")) return;
-  if (sheet.contains(e.target)) return;
-  if (e.target.closest(".cell") || e.target.closest(".rc-row")) return;
-  sheet.classList.remove("open");
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (geoError) { watching = false; startWatch(); }
+  resolvePending();
 });
-
-// ---- overlays ----
-function showNote(text) {
-  $("noteText").textContent = text;
-  const o = $("noteOverlay");
-  o.classList.add("open");
-  o.onclick = () => o.classList.remove("open");
-}
-function showPhoto(blob) {
-  $("photoFull").src = URL.createObjectURL(blob);
-  const o = $("photoOverlay");
-  o.classList.add("open");
-  o.onclick = () => o.classList.remove("open");
-}
 
 // ---- init ----
 (async function init() {
@@ -827,7 +682,7 @@ function showPhoto(blob) {
     $("beginBtn").addEventListener("click", () => {
       lsSet("circIntroSeen", "1");
       $("introOverlay").classList.remove("open");
-      takeReading(); // the first reading IS the tutorial
+      takeReading(); // the first recording IS the tutorial
     });
   }
 
@@ -852,12 +707,12 @@ function showPhoto(blob) {
   }
   renderGrid();
   resolvePending();
-  // heartbeat: while anything is pending, keep trying (worker caching makes retries cheap)
   setInterval(() => {
     if (captures.some(c => c.place === "pending" || c.weather === "pending")) resolvePending();
   }, 20000);
+  setTimeout(resolvePending, 15000);
   if (isEphemeral())
-    showNote("Private window: readings can be taken but nothing is kept after this tab closes.");
+    showNote("Private window: recordings can be taken but nothing is kept after this tab closes.");
   if (DEV.has("export")) {
     const rows = captures.map(({ photo, audio, ...rest }) => rest);
     const a = document.createElement("a");

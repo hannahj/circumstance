@@ -208,27 +208,8 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   display: none;
 }
 .capture.audio-live #wave { display: block; }
-.cap-toggles {
-  position: absolute;
-  top: max(var(--s3), env(safe-area-inset-top));
-  left: var(--s3);
-  display: flex; gap: var(--s2);
-  z-index: 2;
-}
-.tbtn {
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  border: 2px solid var(--ink);
-  cursor: pointer;
-  padding: 9px;
-  transition: background 0.15s ease, color 0.15s ease;
-}
 /* on = inked (pressed stamp); off = outline with slash */
-.tbtn.on { background: var(--ink); color: var(--paper); }
-.tbtn.off { background: transparent; color: var(--ink); opacity: 0.55; }
-.capture.video-live .tbtn.on { background: var(--paper); color: var(--ink); border-color: var(--paper); }
-.capture.video-live .tbtn.off { border-color: var(--paper); color: var(--paper); background: rgba(28,26,22,0.3); }
-.reveal-coin { width: 150px; height: 150px; border-radius: 50%; }
+.capture.video-live .capture.video-live .reveal-coin { width: 150px; height: 150px; border-radius: 50%; }
 .reveal-glyphs { display: flex; gap: var(--s4); }
 .reveal-glyphs svg { width: 44px; height: 44px; }
 .intro-title { font-size: 20px; letter-spacing: 0.2em; }
@@ -247,8 +228,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   color: var(--ink);
 }
 .capture.priming .prime { display: flex; }
-.capture.priming .ritual, .capture.priming #wave, .capture.priming .cap-toggles { display: none; }
-.pill {
+.capture.priming .ritual, .capture.priming #wave, .capture.priming .pill {
   border: 2px solid var(--ink);
   background: transparent;
   color: var(--ink);
@@ -260,22 +240,6 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   align-self: flex-start;
 }
 .pill:active { background: var(--ink-wash-12); }
-.checkrow {
-  display: flex; align-items: center; gap: var(--s3);
-  cursor: pointer; user-select: none; -webkit-user-select: none;
-}
-.checkrow svg.g { width: 24px; height: 24px; flex-shrink: 0; }
-.checkbox {
-  width: 22px; height: 22px;
-  border: 2px solid var(--ink);
-  border-radius: 4px;
-  flex-shrink: 0;
-  display: grid; place-items: center;
-  margin-left: auto;
-}
-.checkrow.checked .checkbox { background: var(--ink); }
-.checkbox svg { width: 14px; height: 14px; display: none; }
-.checkrow.checked .checkbox svg { display: block; }
 .capthint {
   position: absolute;
   top: calc(50% + 118px);
@@ -318,22 +282,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   100% { background: var(--ink-wash-04); }
 }
 
-/* cell sheet */
-.sheet {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  background: var(--paper);
-  border-top: 2px solid var(--ink);
-  padding: var(--s4) var(--s4) max(var(--s4), env(safe-area-inset-bottom));
-  transform: translateY(100%);
-  transition: transform 0.2s ease;
-  z-index: 5;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-.sheet.open { transform: none; }
-.sheet-head { display: flex; gap: var(--s3); align-items: center; margin-bottom: var(--s3); }
-.sheet-row { display: flex; gap: var(--s3); align-items: center; padding: var(--s2) 0; font-size: 12px; }
-.sheet-row .coin { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+
 /* dashed ring: recorded, not on the grid */
 .sheet-row .coin.unplaced { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px transparent; outline: 1.5px dashed var(--ink); outline-offset: 3px; }
 .sheet-row > svg { flex-shrink: 0; }
