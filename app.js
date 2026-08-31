@@ -637,6 +637,8 @@ function holdPhase(overlay) {
     };
     const down = e => {
       if (sealed || e.target.closest(".close")) return;
+      e.preventDefault(); // the hold is ours, not the browser's
+      try { overlay.setPointerCapture(e.pointerId); } catch {}
       holding = true;
       t0 = Date.now();
       if (VIDEO) startClip();
@@ -692,6 +694,7 @@ async function takeReading() {
   const overlay = $("captureOverlay");
   const viewfinder = $("viewfinder");
   overlay.classList.add("open");
+  overlay.oncontextmenu = e => e.preventDefault(); // long-press menu would cut the hold short
   ritualActive = true;
 
   // arming: the browser's own prompts are the only words on the happy path
