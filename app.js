@@ -254,7 +254,7 @@ function renderGrid(highlight, opts = {}) {
 
   if (stage === "seed") {
     grid.style.gridTemplateColumns = "1fr";
-    grid.innerHTML = '<div class="seedwrap"><div class="seedcircle"></div><div class="seedhint">Record unique circumstances.<br>It will take a while.</div></div>';
+    grid.innerHTML = '<div class="seedwrap"><div class="seedcircle"></div><div class="seedhint">Record unique circumstances.<br>Some take seasons.</div></div>';
   } else {
     const { places, weathers } = witnessed();
     grid.classList.toggle("wide", weathers.length === 4);
