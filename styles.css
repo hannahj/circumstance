@@ -20,6 +20,7 @@
 html, body { height: 100%; }
 body {
   margin: 0;
+  overflow-x: hidden;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--mono);
@@ -70,7 +71,8 @@ header {
 }
 .grid > svg { justify-self: center; }
 /* row-label glyphs hang from the paper's left edge, aligned with the title */
-.grid > svg.rowg { justify-self: start; }
+.grid > svg.rowg { justify-self: center; }
+.grid > svg.colg { justify-self: center; margin-bottom: 3px; }
 .cell {
   aspect-ratio: 1;
   border: 1.5px solid var(--ink);
@@ -213,6 +215,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 .sheet-row .more { display: none; }
 .sheet-row.more-open .more { display: inline-grid; border: none; width: 34px; height: 40px; }
 .sheet-row.more-open .morebtn { transform: rotate(90deg); }
+.sheet-row.more-open .thumb, .sheet-row.more-open .when { display: none; }
 
 /* tooltip: one small sentence, anchored, self-dismissing */
 .tip {
@@ -354,7 +357,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 .sheet-row .coin.unplaced { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px transparent; outline: 1.5px dashed var(--ink); outline-offset: 3px; }
 .sheet-row > svg { flex-shrink: 0; }
 .sheet-row .when { }
-.sheet-row .grow { flex: 1; }
+.sheet-row .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sheet-row .thumb {
   width: 36px; height: 36px;
   border-radius: 4px;

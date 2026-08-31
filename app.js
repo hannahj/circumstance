@@ -263,7 +263,7 @@ function renderGrid(highlight, opts = {}) {
     grid.classList.toggle("wide", weathers.length === 4);
     grid.classList.toggle("young", weathers.length <= 2);
     grid.style.gridTemplateColumns =
-      `22px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
+      `30px repeat(${weathers.length}, ${weathers.length < 4 ? "minmax(0, 112px)" : "1fr"})`;
     const trig = opts.deepening;
     grid.innerHTML = "<div></div>" + weathers.map(w => glyph(w, 26).replace("<svg ", '<svg class="colg" ')).join("");
     for (const p of places) {
@@ -359,7 +359,7 @@ function showTip(anchor, html, ms = 3200) {
 // ---- the circumstances list: every recording, always up ----
 const INFO_TEXT =
   "Record unique circumstances, based on time, location, and weather.\n\n" +
-  "Recordings include ten seconds of sound and one photograph and are only stored on your device.";
+  "Recordings include ten seconds of sound and one photograph, which are only stored on your device.";
 
 async function saveBackup() {
   const blob = await makeBackup(captures);
