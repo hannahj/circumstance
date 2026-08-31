@@ -674,6 +674,8 @@ function holdPhase(overlay) {
 // ---- the recording ----
 async function takeReading() {
   if (ritualActive) return;
+  const po = $("photoOverlay");
+  if (po.classList.contains("open") && po.onclick) po.onclick({ target: po }); // close a viewer cleanly first
   startWatch(); // first gesture doubles as the permission moment
   $("readBtn").disabled = true;
   const overlay = $("captureOverlay");
@@ -769,7 +771,7 @@ async function takeReading() {
     time: now.toISOString(),
     lat: fix.coords.latitude,
     lon: fix.coords.longitude,
-    band: timeBand(fix.coords.latitude, fix.coords.longitude, now),
+    band: timeBand(fix.coords.latitude, fix.coords.longitude, now).band,
     photo, audio,
     weather: weather ? weather.bucket : "pending",
     weatherCode: weather?.code, tempC: weather?.temp, windKmh: weather?.wind,
@@ -914,6 +916,17 @@ document.addEventListener("visibilitychange", () => {
     captures = [];
     console.error("capture load failed", e);
   }
+  // repair: captures saved with an object where the band string belongs
+  let repaired = false;
+  for (const c of captures) {
+    if (c.band && typeof c.band === "object" && typeof c.band.band === "string") {
+      c.band = c.band.band;
+      await putCapture(c);
+      repaired = true;
+    }
+  }
+  if (repaired) await reEvaluateAll();
+
   if (DEV.get("purge") === "dev") {
     const dev = captures.filter(c => c.devForced);
     for (const c of dev) await deleteCapture(c.id);
