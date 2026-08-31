@@ -33,12 +33,12 @@ body {
   display: flex;
   flex-direction: column;
 }
-.devbadge {
-  position: absolute;
-  top: var(--s3); right: var(--s4);
-  font-size: 11px;
-  color: var(--ink);
+header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: var(--s4);
 }
+.brand { font-size: 14px; font-weight: 500; letter-spacing: 0.12em; }
+.devbadge { font-size: 11px; margin-left: var(--s2); }
 .devbadge:empty { display: none; }
 header {
   display: flex; justify-content: space-between; align-items: baseline;
@@ -126,8 +126,18 @@ footer {
   text-align: center;
   line-height: 1.7;
 }
-.settings { margin-block: var(--s6); display: flex; justify-content: center; gap: var(--s3); }
-.settings .info { width: 26px; height: 26px; display: inline-grid; place-items: center; margin-left: 0; vertical-align: 0; font-size: 12px; }
+.settings {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: 12px;
+}
+.settings button {
+  background: none; border: none; padding: var(--s1);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
 .menu { display: flex; flex-direction: column; }
 .menu button {
   background: none; border: none;

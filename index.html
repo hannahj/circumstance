@@ -13,7 +13,14 @@
 <body class="booting">
 
 <div class="page">
-  <div class="devbadge" id="counter"></div>
+  <header>
+    <div class="brand">CIRCUMSTANCE<span class="devbadge" id="counter"></span></div>
+    <nav class="settings">
+      <button id="infoBtn">Info</button>
+      <span>·</span>
+      <button id="gearBtn">Settings</button>
+    </nav>
+  </header>
 
   <div class="grid" id="grid"></div>
 
@@ -24,10 +31,6 @@
 
   <div class="lower">
     <div class="repeats" id="repeats"></div>
-    <div class="settings">
-      <button class="info" id="infoBtn" aria-label="about">i</button>
-      <button class="info gear" id="gearBtn" aria-label="settings"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="3.4" fill="none" stroke="var(--ink)" stroke-width="2"/><g stroke="var(--ink)" stroke-width="2" stroke-linecap="round"><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></g></svg></button>
-    </div>
   </div>
 </div>
 

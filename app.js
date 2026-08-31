@@ -345,7 +345,8 @@ function showTip(anchor, html, ms = 3200) {
   document.body.appendChild(tip);
   const r = anchor.getBoundingClientRect();
   tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
-  tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + "px";
+  const above = r.top - tip.offsetHeight - 8;
+  tip.style.top = (above < 8 ? r.bottom + 8 : above) + "px";
   const dismiss = e => {
     if (e && e.target && e.target.closest && e.target.closest(".tip")) return;
     tip.remove();

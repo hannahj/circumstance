@@ -35,14 +35,13 @@ async function circlePhoto(ctx, blob, cx, cy, r) {
   bmp.close();
 }
 
-// layout mirrors the page: witnessed rows and columns only; deep boards show quadrants
+// layout mirrors the page: witnessed rows and columns only; deep boards show quadrants.
+// canvas sized to the board itself — no fixed width, no dead margins
 export async function boardBlob({ captures, places, weathers, bands, glyph, deepened }) {
-  const M = 72, GH = 76, CELLGAP = 22, W = 1080;
+  const CELL = 340, GH = 110, GAP = 34, M = 90, CAPTION = 120;
   const cols = weathers.length, rowsN = places.length;
-  const cellW = Math.min(220, (W - 2 * M - GH - (cols - 1) * CELLGAP) / cols);
-  const gridW = GH + cols * cellW + (cols - 1) * CELLGAP;
-  const x0 = (W - gridW) / 2;
-  const H = M + GH + rowsN * cellW + (rowsN - 1) * CELLGAP + M + 60;
+  const W = 2 * M + GH + cols * CELL + (cols - 1) * GAP;
+  const H = M + GH + rowsN * CELL + (rowsN - 1) * GAP + CAPTION + M / 2;
 
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
@@ -50,48 +49,48 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, W, H);
 
-  const gsize = 44;
+  const x0 = M, gsize = 66;
   for (let ci = 0; ci < cols; ci++) {
     const img = await svgImage(glyph(weathers[ci], gsize));
-    ctx.drawImage(img, x0 + GH + ci * (cellW + CELLGAP) + cellW / 2 - gsize / 2, M + (GH - gsize) / 2 - 8);
+    ctx.drawImage(img, x0 + GH + ci * (CELL + GAP) + CELL / 2 - gsize / 2, M + (GH - gsize) / 2 - 12);
   }
   for (let ri = 0; ri < rowsN; ri++) {
     const img = await svgImage(glyph(places[ri], gsize));
-    ctx.drawImage(img, x0 + (GH - gsize) / 2 - 8, M + GH + ri * (cellW + CELLGAP) + cellW / 2 - gsize / 2);
+    ctx.drawImage(img, x0 + (GH - gsize) / 2 - 12, M + GH + ri * (CELL + GAP) + CELL / 2 - gsize / 2);
   }
 
   for (let ri = 0; ri < rowsN; ri++) for (let ci = 0; ci < cols; ci++) {
-    const x = x0 + GH + ci * (cellW + CELLGAP), y = M + GH + ri * (cellW + CELLGAP);
+    const x = x0 + GH + ci * (CELL + GAP), y = M + GH + ri * (CELL + GAP);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 5;
     ctx.setLineDash([]);
-    roundRect(ctx, x, y, cellW, cellW, 10);
+    roundRect(ctx, x, y, CELL, CELL, 16);
     ctx.stroke();
     const kin = captures.filter(c => c.stamped && c.place === places[ri] && c.weather === weathers[ci]);
     if (!deepened) {
-      const r = cellW * 0.34, cx = x + cellW / 2, cy = y + cellW / 2;
+      const r = CELL * 0.34, cx = x + CELL / 2, cy = y + CELL / 2;
       if (kin[0] && kin[0].photo) await circlePhoto(ctx, kin[0].photo, cx, cy, r);
       else if (kin[0]) { ctx.fillStyle = SKYHEX[kin[0].band]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
       else {
         ctx.strokeStyle = "rgba(182,65,46,0.45)";
-        ctx.lineWidth = 2.4;
-        ctx.setLineDash([7, 8]);
+        ctx.lineWidth = 3.6;
+        ctx.setLineDash([11, 13]);
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
       }
     } else {
       const marks = {};
       for (const c of kin) marks[c.band] = c;
-      const r = cellW * 0.185;
+      const r = CELL * 0.185;
       for (let qi = 0; qi < 4; qi++) {
-        const cx = x + cellW * (qi % 2 ? 0.725 : 0.275);
-        const cy = y + cellW * (qi > 1 ? 0.725 : 0.275);
+        const cx = x + CELL * (qi % 2 ? 0.725 : 0.275);
+        const cy = y + CELL * (qi > 1 ? 0.725 : 0.275);
         const m = marks[bands[qi]];
         if (m && m.photo) await circlePhoto(ctx, m.photo, cx, cy, r);
         else if (m) { ctx.fillStyle = SKYHEX[m.band]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
         else {
           ctx.strokeStyle = "rgba(182,65,46,0.45)";
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 7]);
+          ctx.lineWidth = 3;
+          ctx.setLineDash([9, 11]);
           ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
         }
       }
@@ -100,10 +99,10 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
 
   ctx.setLineDash([]);
   ctx.fillStyle = INK;
-  ctx.font = "500 26px ui-monospace, Menlo, monospace";
+  ctx.font = "500 42px ui-monospace, Menlo, monospace";
   ctx.textAlign = "center";
-  ctx.letterSpacing = "6px";
-  ctx.fillText("CIRCUMSTANCE", W / 2, H - M + 14);
+  ctx.letterSpacing = "11px";
+  ctx.fillText("CIRCUMSTANCE", W / 2, H - M / 2 - 28);
 
   return new Promise(res => canvas.toBlob(res, "image/png"));
 }
