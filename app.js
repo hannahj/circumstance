@@ -336,11 +336,11 @@ function landStamp(c) {
 }
 
 // a one-line anchored tip that dismisses itself
-function showTip(anchor, text) {
+function showTip(anchor, html) {
   document.querySelectorAll(".tip").forEach(t => t.remove());
   const tip = document.createElement("div");
   tip.className = "tip";
-  tip.textContent = text;
+  tip.innerHTML = html;
   document.body.appendChild(tip);
   const r = anchor.getBoundingClientRect();
   tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
@@ -418,7 +418,7 @@ function renderCircumstances() {
         renderGrid({ place: c.place, weather: c.weather, band: c.band });
         $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
       } else {
-        showTip(row, "Repeat \u2014 not on the grid. \u2191 replaces another.");
+        showTip(row, 'Repeat \u2014 not on the grid. <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg> replaces another.');
       }
     });
     box.appendChild(row);

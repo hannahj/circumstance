@@ -28,7 +28,7 @@ body {
 .page {
   width: 100%;
   max-width: 420px;
-  padding: max(var(--s5), env(safe-area-inset-top)) var(--s4) max(var(--s5), env(safe-area-inset-bottom));
+  padding: 0 var(--s4);
   display: flex;
   flex-direction: column;
 }
@@ -90,8 +90,8 @@ header {
 footer {
   display: flex; flex-direction: column; align-items: center;
   margin-block: var(--s5);
-  gap: var(--s2);
 }
+.status { margin-bottom: var(--s2); }
 .almanac { width: 100%; text-align: center; }
 .almanac svg { display: block; width: 100%; }
 .status { font-size: 12px; }
@@ -101,7 +101,7 @@ footer {
   appearance: none;
   height: 52px; flex-shrink: 0;
   line-height: 1;
-  font-weight: 600;
+  font-weight: 500;
   padding: 0 20px;
   display: inline-flex; align-items: center; gap: 10px;
   border-radius: 999px;
@@ -169,7 +169,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 }
 .repeats .rc-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   margin-block: var(--s2) var(--s4);
@@ -187,7 +187,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   border: 1.5px solid var(--ink);
   border-radius: 8px;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink);
   max-width: 240px;
   line-height: 1.5;
