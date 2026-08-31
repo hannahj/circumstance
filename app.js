@@ -283,10 +283,13 @@ function renderCircumstances() {
     row.className = "rc-row";
     const pending = c.place === "pending" || c.weather === "pending";
     const u = photoURL(c);
+    const unplaced = !pending && !c.stamped;
     row.innerHTML =
-      (u ? `<img class="rc-thumb" src="${u}" alt="">` : `<div class="coin" style="background:${SKY[c.band]}"></div>`) +
-      (pending ? "" : glyph(c.place, 16) + glyph(c.weather, 16)) +
-      `<div class="when grow">${pending ? "resolving\u2026" : relativeDay(c.time) + (c.stamped ? "" : " \u00b7 unmarked")}</div>`;
+      `<div class="rc-mark${unplaced ? " unplaced" : ""}">` +
+      (u ? `<img src="${u}" alt="">` : `<div class="coin" style="background:${SKY[c.band]}"></div>`) +
+      `</div>` +
+      (pending ? "" : glyph(c.place, 18) + glyph(c.weather, 18)) +
+      `<div class="when">${pending ? "resolving\u2026" : relativeDay(c.time)}</div>`;
     if (c.audio) {
       const btn = document.createElement("button");
       btn.className = "play";

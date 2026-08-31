@@ -37,7 +37,6 @@ body {
   top: var(--s3); right: var(--s4);
   font-size: 11px;
   color: var(--ink);
-  opacity: 0.75;
 }
 .devbadge:empty { display: none; }
 header {
@@ -47,7 +46,7 @@ header {
   margin-bottom: var(--s4);
 }
 .title { font-size: 15px; letter-spacing: 0.14em; }
-.counter { font-size: 12px; opacity: 0.75; }
+.counter { font-size: 12px; }
 
 .grid {
   margin-top: var(--s5);
@@ -89,13 +88,13 @@ header {
 .q svg { display: block; width: 100%; height: 100%; }
 
 footer {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; flex-direction: column; align-items: center;
   margin-top: var(--s4);
-  gap: var(--s3);
+  gap: var(--s2);
 }
-.almanac { flex: 1; min-width: 0; margin-left: 30px; }
+.almanac { width: 100%; text-align: center; }
 .almanac svg { display: block; width: 100%; }
-.status { font-size: 11.5px; opacity: 0.8; margin-top: var(--s2); min-height: 1.2em; }
+.status { font-size: 12px; margin-top: var(--s2); min-height: 1.2em; }
 .read {
   height: 54px; flex-shrink: 0;
   padding: 0 20px;
@@ -108,7 +107,8 @@ footer {
   font-size: 13px; letter-spacing: 0.18em;
   cursor: pointer;
 }
-.read:active, .read:disabled { background: var(--ink-wash-12); }
+.read:active { transform: scale(0.97); }
+.read:disabled { opacity: 0.35; }
 /* after the first reveal: the button breathes twice — the only tutorial */
 .read.nudge { animation: nudge 1.1s ease 2; }
 @keyframes nudge {
@@ -149,33 +149,43 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 }
 
 .cell .q img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
-.rc-thumb { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.rc-row .grow { flex: 1; }
 
 /* the circumstances list (was: repeat circumstance) */
 .repeats { margin-top: var(--s5); }
 .repeats:empty { display: none; }
 .repeats .rc-title {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  opacity: 0.75;
   border-top: 1px solid var(--ink-wash-45);
   padding-top: var(--s3);
   margin-bottom: var(--s2);
-  margin-left: 30px;
 }
 .rc-row {
-  display: flex; align-items: center; gap: var(--s2);
-  margin-left: 30px;
-  padding: var(--s1) 0;
-  font-size: 11.5px;
-  opacity: 0.85;
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s2) 0;
+  min-height: 48px;
+  font-size: 13px;
   cursor: pointer;
 }
-.rc-row .coin { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; }
-.rc-row svg { width: 16px; height: 16px; }
-.rc-row .when { opacity: 0.75; margin-left: auto; }
+.rc-mark {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+}
+/* dashed ring = recorded but not placed on the grid (same vocabulary as empty circles) */
+.rc-mark.unplaced {
+  width: 34px; height: 34px;
+  border: 1.5px dashed var(--ink);
+  padding: 2px;
+}
+.rc-mark img, .rc-mark .coin {
+  width: 100%; height: 100%;
+  border-radius: 50%; object-fit: cover;
+}
+.rc-row > svg { width: 18px; height: 18px; flex-shrink: 0; }
+.rc-row .when { margin-left: auto; }
 
 /* overlays: the ritual, a note (errors), a photo viewer */
 .overlay {
@@ -244,7 +254,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 .reveal-glyphs svg { width: 44px; height: 44px; }
 .intro-title { font-size: 20px; letter-spacing: 0.2em; }
 #introOverlay { gap: calc(var(--s5) * 2); }
-.note { font-size: 12px; opacity: 0.85; text-align: center; max-width: 280px; line-height: 1.6; white-space: pre-line; }
+.note { font-size: 12.5px; text-align: center; max-width: 280px; line-height: 1.6; white-space: pre-line; }
 #photoFull { max-width: 92vw; max-height: 80vh; border: 1.5px solid var(--ink); border-radius: 4px; }
 
 .capture .close { z-index: 4; }
@@ -345,7 +355,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 .sheet-head { display: flex; gap: var(--s3); align-items: center; margin-bottom: var(--s3); }
 .sheet-row { display: flex; gap: var(--s3); align-items: center; padding: var(--s2) 0; font-size: 12px; }
 .sheet-row .coin { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
-.sheet-row .when { opacity: 0.75; }
+.sheet-row .when { }
 .sheet-row .grow { flex: 1; }
 .sheet-row .thumb {
   width: 40px; height: 40px;
@@ -355,15 +365,16 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   cursor: pointer;
   flex-shrink: 0;
 }
-.sheet-row .play {
-  width: 34px; height: 34px;
+.play {
+  width: 40px; height: 40px;
   border: 1.5px solid var(--ink);
   border-radius: 50%;
   background: none;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   flex-shrink: 0;
+  display: inline-grid; place-items: center;
 }
-.sheet-row .play:active { background: var(--ink-wash-12); }
+.play:active { transform: scale(0.94); }
 .sheet-empty { font-size: 12px; opacity: 0.6; padding: var(--s2) 0; }
