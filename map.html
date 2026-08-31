@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Circumstance — map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { margin: 0; font-family: ui-monospace, Menlo, monospace; background: #f4f0e6; color: #b6412e; }
+  #map { position: fixed; inset: 0; }
+  .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+         background: #ece6d7; border-bottom: 2.5px solid #b6412e;
+         padding: 10px 16px; display: flex; gap: 16px; align-items: center; font-size: 13px; }
+  .bar b { font-weight: 500; letter-spacing: 0.12em; }
+  label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .leaflet-popup-content { font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>CIRCUMSTANCE — MAP</b>
+  <label><input type="checkbox" id="zones" checked> 200 m zones</label>
+  <label><input type="checkbox" id="repeats" checked> repeats</label>
+  <span id="count"></span>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SKY = { dawn: "#e39b78", day: "#ddbe7c", dusk: "#a9707b", night: "#333c54" };
+const INK = "#b6412e";
+
+function loadCaptures() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open("circumstance", 1);
+    req.onerror = () => rej(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      const q = db.transaction("captures", "readonly").objectStore("captures").getAll();
+      q.onsuccess = () => res(q.result.map(({ photo, audio, video, ...rest }) => rest));
+      q.onerror = () => rej(q.error);
+    };
+  });
+}
+
+(async () => {
+  let rows = [];
+  try { rows = await loadCaptures(); }
+  catch (e) { document.getElementById("count").textContent = "no data (open this on the same device/browser as the game)"; }
+  rows = rows.filter(r => typeof r.lat === "number" && typeof r.lon === "number");
+
+  const map = L.map("map");
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { attribution: "&copy; OpenStreetMap contributors", maxZoom: 19 }).addTo(map);
+
+  const zoneLayer = L.layerGroup().addTo(map);
+  const markLayer = L.layerGroup().addTo(map);
+  const repeatLayer = L.layerGroup().addTo(map);
+
+  const pts = [];
+  for (const c of rows) {
+    pts.push([c.lat, c.lon]);
+    const band = typeof c.band === "string" ? c.band : (c.band && c.band.band) || "day";
+    const ev = c.placeEvidence
+      ? Object.entries(c.placeEvidence).map(([k, v]) => `${k}: ${Math.round(v)} m`).join("<br>")
+      : "(no evidence stored)";
+    const popup =
+      `<b>${c.place} · ${c.weather} · ${band}</b><br>` +
+      `${new Date(c.time).toLocaleString()}<br>` +
+      `${c.stamped ? "on the grid" : "repeat" + (c.why ? " — " + c.why : "")}<br>` +
+      `${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}` +
+      (c.cloud !== undefined ? `<br>cloud cover: ${c.cloud}%` : "") +
+      `<br><i>${ev}</i>`;
+    const m = L.circleMarker([c.lat, c.lon], {
+      radius: 8,
+      color: INK,
+      weight: 2,
+      fillColor: SKY[band] || "#999",
+      fillOpacity: c.stamped ? 0.95 : 0.35,
+      dashArray: c.stamped ? null : "3 4",
+    }).bindPopup(popup);
+    m.addTo(c.stamped ? markLayer : repeatLayer);
+    if (c.stamped)
+      L.circle([c.lat, c.lon], { radius: 200, color: INK, weight: 1, fill: true, fillOpacity: 0.04, dashArray: "6 7" })
+        .addTo(zoneLayer);
+  }
+  if (pts.length) map.fitBounds(pts, { padding: [60, 60] });
+  else map.setView([45.4215, -75.6972], 12);
+
+  document.getElementById("count").textContent =
+    rows.length + " recordings · " + rows.filter(r => r.stamped).length + " on the grid";
+  document.getElementById("zones").addEventListener("change", e =>
+    e.target.checked ? zoneLayer.addTo(map) : map.removeLayer(zoneLayer));
+  document.getElementById("repeats").addEventListener("change", e =>
+    e.target.checked ? repeatLayer.addTo(map) : map.removeLayer(repeatLayer));
+})();
+</script>
+</body>
+</html>
