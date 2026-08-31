@@ -153,11 +153,19 @@ function showNote(text) {
   o.onclick = () => o.classList.remove("open");
 }
 
-function showPhoto(blob) {
+function showPhoto(blob, audioBlob) {
   $("photoFull").src = URL.createObjectURL(blob);
   const o = $("photoOverlay");
   o.classList.add("open");
-  o.onclick = () => o.classList.remove("open");
+  let player = null;
+  if (audioBlob) {
+    player = new Audio(URL.createObjectURL(audioBlob));
+    player.play().catch(() => {});
+  }
+  o.onclick = () => {
+    o.classList.remove("open");
+    if (player) { player.pause(); player = null; }
+  };
 }
 
 const ICON_SHARE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -202,7 +210,7 @@ async function promoteCapture(c) {
   const occupant = captures.find(x =>
     x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
   const s = tryStamp(c, occupant ? occupant.id : undefined);
-  if (!s.stamped) { flashStatus("Can't swap in: " + s.why + "."); return false; }
+  if (!s.stamped) return { ok: false, why: s.why };
   if (occupant) {
     occupant.stamped = false;
     occupant.why = "swapped out";
@@ -212,7 +220,7 @@ async function promoteCapture(c) {
   c.why = undefined;
   await putCapture(c);
   landStamp(c);
-  return true;
+  return { ok: true };
 }
 
 // ---- rendering: the grid grows toward what the player witnesses ----
@@ -408,7 +416,7 @@ function renderCircumstances() {
       const img = document.createElement("img");
       img.className = "thumb";
       img.src = photoURL(c);
-      img.addEventListener("click", () => showPhoto(c.photo));
+      img.addEventListener("click", () => showPhoto(c.photo, c.audio));
       row.appendChild(img);
     }
     if (c.audio) {
@@ -438,7 +446,11 @@ function renderCircumstances() {
       const up = document.createElement("button");
       up.className = "play more";
       up.innerHTML = ICON_PROMOTE;
-      up.addEventListener("click", () => promoteCapture(c));
+      up.addEventListener("click", async () => {
+        const r = await promoteCapture(c);
+        if (r.ok) $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
+        else showTip(row, "Can't swap \u2014 " + r.why + ".");
+      });
       row.appendChild(up);
     }
     const del = document.createElement("button");
