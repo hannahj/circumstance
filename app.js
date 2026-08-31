@@ -1,4 +1,4 @@
-import { timeBand, sunTimes } from "./sun.js";
+import { timeBand } from "./sun.js";
 import { fetchWeatherNow, backfillWeather } from "./weather.js";
 import { classifyPlace, takeEvidence } from "./classify.js";
 import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
@@ -59,7 +59,7 @@ function startWatch() {
   if (watching) return;
   watching = true;
   watchId = navigator.geolocation.watchPosition(
-    p => { lastFix = p; geoError = null; renderArc(); },
+    p => { lastFix = p; geoError = null; },
     e => {
       geoError = e;
       // a denied watch is dead — drop it so the next attempt registers fresh
@@ -130,6 +130,18 @@ function tryStamp(capture, ignoreId) {
 }
 
 // ---- rendering: the grid grows toward what the player witnesses ----
+const thumbURLs = new Map();
+function photoURL(c) {
+  if (!c.photo) return null;
+  if (!thumbURLs.has(c.id)) thumbURLs.set(c.id, URL.createObjectURL(c.photo));
+  return thumbURLs.get(c.id);
+}
+function markHTML(c) {
+  const u = photoURL(c);
+  return u
+    ? `<img src="${u}" alt="">`
+    : `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[c.band]}"/></svg>`;
+}
 function resolvedCaptures() {
   return captures.filter(c => c.place !== "pending" && c.weather !== "pending");
 }
@@ -179,7 +191,7 @@ function renderGrid(highlight, opts = {}) {
         if (kin.length) {
           cell.innerHTML =
             `<div class="q${isNew && highlight.band ? " new" : ""}"><div>` +
-            `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[kin[0].band]}"/></svg>` +
+            markHTML(kin[0]) +
             `</div></div>`;
         } else {
           cell.innerHTML = '<div class="q empty"><div></div></div>';
@@ -222,8 +234,7 @@ function renderGrid(highlight, opts = {}) {
             q.style.setProperty("--sy", (qi > 1 ? "-54%" : "54%"));
           }
           const inner = document.createElement("div");
-          if (marks[b]) inner.innerHTML =
-            `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[b]}"/></svg>`;
+          if (marks[b]) inner.innerHTML = markHTML(marks[b]);
           q.appendChild(inner);
           cell.appendChild(q);
         });
@@ -238,8 +249,7 @@ function renderGrid(highlight, opts = {}) {
   const devOn = FORCE.weather || FORCE.place || FORCE.band || DEV.has("dist");
   $("counter").textContent = devOn ? "\u26a0 dev" : "";
   $("status").textContent = "";
-  renderRepeats();
-  renderInlineDetails();
+  renderCircumstances();
 }
 
 // a stamp lands: bud, mark — or deepen
@@ -263,22 +273,50 @@ function landStamp(c) {
   }
 }
 
-function renderRepeats() {
+function renderCircumstances() {
   const box = $("repeats");
-  const rows = captures
-    .filter(c => !c.stamped && c.why && c.place !== "pending" && c.weather !== "pending")
-    .sort((a, b) => a.time < b.time ? 1 : -1)
-    .slice(0, 6);
+  const rows = [...captures].sort((a, b) => a.time < b.time ? 1 : -1);
   if (!rows.length) { box.innerHTML = ""; return; }
-  box.innerHTML = '<div class="rc-title">Repeat circumstance</div>';
+  box.innerHTML = '<div class="rc-title">Circumstances</div>';
   for (const c of rows) {
     const row = document.createElement("div");
     row.className = "rc-row";
+    const pending = c.place === "pending" || c.weather === "pending";
+    const u = photoURL(c);
     row.innerHTML =
-      `<div class="coin" style="background:${SKY[c.band]}"></div>` +
-      glyph(c.place, 16) + glyph(c.weather, 16) +
-      `<div class="when">${relativeDay(c.time)}</div>`;
-    row.addEventListener("click", () => openSheet(c.place, c.weather));
+      (u ? `<img class="rc-thumb" src="${u}" alt="">` : `<div class="coin" style="background:${SKY[c.band]}"></div>`) +
+      (pending ? "" : glyph(c.place, 16) + glyph(c.weather, 16)) +
+      `<div class="when grow">${pending ? "resolving\u2026" : relativeDay(c.time) + (c.stamped ? "" : " \u00b7 unmarked")}</div>`;
+    if (c.audio) {
+      const btn = document.createElement("button");
+      btn.className = "play";
+      btn.textContent = "\u25b6";
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        new Audio(URL.createObjectURL(c.audio)).play().catch(() => {});
+      });
+      row.appendChild(btn);
+    }
+    if (!c.stamped && c.why && !pending) {
+      const up = document.createElement("button");
+      up.className = "play";
+      up.innerHTML = ICON_PROMOTE;
+      up.addEventListener("click", async e => {
+        e.stopPropagation();
+        await promoteCapture(c);
+      });
+      row.appendChild(up);
+    }
+    const del = document.createElement("button");
+    del.className = "play";
+    del.innerHTML = ICON_TRASH;
+    del.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!confirm("Delete this recording? Its photo and sound go with it.")) return;
+      await removeCapture(c);
+    });
+    row.appendChild(del);
+    if (!pending) row.addEventListener("click", () => openSheet(c.place, c.weather));
     box.appendChild(row);
   }
 }
@@ -299,32 +337,6 @@ function relativeDay(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function renderArc() {
-  const svg = $("arc");
-  const bare = '<path d="M2 34H198" stroke="var(--ink)" stroke-width="1.4"/>';
-  if (!lastFix) { svg.innerHTML = bare; return; }
-  const { latitude: lat, longitude: lon } = lastFix.coords;
-  const now = new Date();
-  const { rise, set } = sunTimes(lat, lon, now);
-  if (!rise || !set) { svg.innerHTML = bare; return; }
-
-  const x1 = 22, x2 = 182, cy = 34, rx = (x2 - x1) / 2, ry = 25, cx = (x1 + x2) / 2;
-  const frac = (now - rise) / (set - rise);
-  // at night there is no dot: the sun is not in the sky
-  let dot = "";
-  if (frac >= 0 && frac <= 1) {
-    const th = Math.PI * (1 - frac);
-    const dx = cx + rx * Math.cos(th), dy = cy - ry * Math.sin(th);
-    dot = `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="4.5" fill="${SKY[timeBand(lat, lon, now).band]}"/>`;
-  }
-  const fmt = d => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
-  svg.innerHTML =
-    `<path d="M2 ${cy}H198" stroke="var(--ink)" stroke-width="1.4"/>` +
-    `<path d="M${x1} ${cy}A${rx} ${ry} 0 0 1 ${x2} ${cy}" fill="none" stroke="var(--ink)" stroke-width="1.4"/>` +
-    dot +
-    `<text x="${x1}" y="47" text-anchor="middle" font-size="10" fill="var(--ink)" opacity="0.8" font-family="var(--mono)">${fmt(rise)}</text>` +
-    `<text x="${x2}" y="47" text-anchor="middle" font-size="10" fill="var(--ink)" opacity="0.8" font-family="var(--mono)">${fmt(set)}</text>`;
-}
 
 // ---- ritual phases ----
 let cancelFns = [];
@@ -574,7 +586,12 @@ async function takeReading() {
       (capture.weather !== "pending" ? glyph(capture.weather, 44) : "");
     const ro = $("revealOverlay");
     ro.classList.add("open");
-    ro.onclick = () => ro.classList.remove("open");
+    ro.onclick = () => {
+      ro.classList.remove("open");
+      const btn = $("readBtn");
+      btn.classList.add("nudge");
+      btn.addEventListener("animationend", () => btn.classList.remove("nudge"), { once: true });
+    };
   }
 
   // if the ritual's fetches land late, keep their answers instead of discarding them
@@ -764,15 +781,6 @@ function openSheet(p, w) {
   sheet.classList.add("open");
 }
 
-// a one-cell board keeps its recordings in view, no tap needed
-function renderInlineDetails() {
-  const box = $("inlineDetails");
-  const occupied = [];
-  for (const p of PLACES) for (const w of WEATHERS)
-    if (captures.some(c => c.place === p && c.weather === w)) occupied.push([p, w]);
-  if (occupied.length !== 1) { box.innerHTML = ""; return; }
-  buildRows(box, occupied[0][0], occupied[0][1], renderInlineDetails);
-}
 
 // one permanent close handler: taps outside close the sheet,
 // taps on another cell or repeat row switch it instead
@@ -810,8 +818,6 @@ function showPhoto(blob) {
 
   // paint and wire everything synchronously: no data load may delay the page
   renderGrid();
-  renderArc();
-  setInterval(renderArc, 60000);
   $("readBtn").addEventListener("click", takeReading);
   $("capClose").addEventListener("click", endRitual);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

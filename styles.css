@@ -40,8 +40,6 @@ body {
   opacity: 0.75;
 }
 .devbadge:empty { display: none; }
-.inline-details { margin-top: var(--s4); }
-.inline-details:empty { display: none; }
 header {
   display: flex; justify-content: space-between; align-items: baseline;
   border-bottom: 2px solid var(--ink);
@@ -99,17 +97,24 @@ footer {
 .almanac svg { display: block; width: 100%; }
 .status { font-size: 11.5px; opacity: 0.8; margin-top: var(--s2); min-height: 1.2em; }
 .read {
-  width: 86px; height: 86px; flex-shrink: 0;
-  border-radius: 50%;
+  height: 54px; flex-shrink: 0;
+  padding: 0 20px;
+  display: inline-flex; align-items: center; gap: 10px;
+  border-radius: 999px;
   border: 2.5px solid var(--ink);
   background: transparent;
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 12px; letter-spacing: 0.08em; line-height: 1.3;
-  transform: rotate(-4deg);
+  font-size: 13px; letter-spacing: 0.18em;
   cursor: pointer;
 }
 .read:active, .read:disabled { background: var(--ink-wash-12); }
+/* after the first reveal: the button breathes twice — the only tutorial */
+.read.nudge { animation: nudge 1.1s ease 2; }
+@keyframes nudge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
 
 /* the seed: one unlabeled mystery circle, the grid waiting to be planted */
 .grid.seed { display: block; }
@@ -143,7 +148,11 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   to { transform: none; }
 }
 
-/* repeat circumstance: readings kept but not marked */
+.cell .q img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+.rc-thumb { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.rc-row .grow { flex: 1; }
+
+/* the circumstances list (was: repeat circumstance) */
 .repeats { margin-top: var(--s5); }
 .repeats:empty { display: none; }
 .repeats .rc-title {
