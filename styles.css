@@ -41,26 +41,20 @@ header {
   padding-inline: calc(50vw - 50%);
   padding-block: var(--s3);
   background: var(--paper2);
+  border-bottom: 2.5px solid var(--ink);
 }
 .brand { font-size: 16px; font-weight: 600; letter-spacing: 0.12em; line-height: 1; display: flex; align-items: center; }
 .devbadge { font-size: 11px; margin-left: var(--s2); }
 .devbadge:empty { display: none; }
-header {
-  display: flex; justify-content: space-between; align-items: baseline;
-  border-bottom: 2px solid var(--ink);
-  padding-bottom: var(--s2);
-  margin-bottom: var(--s4);
-}
-.title { font-size: 15px; letter-spacing: 0.14em; }
-.counter { font-size: 12px; }
 
 .field {
   margin-inline: calc(50% - 50vw);
   padding-inline: calc(50vw - 50%);
+  padding-block: var(--s3) var(--s4);
   background: var(--paper);
 }
 .grid {
-  margin-top: var(--s2);
+  margin-top: 0;
   display: grid;
   grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);
@@ -146,10 +140,13 @@ footer:has(.status:empty) { margin-block: 0; }
 .settings button {
   -webkit-appearance: none;
   appearance: none;
-  background: none; border: none; padding: 2px;
+  background: var(--paper);
+  border: none; border-radius: 50%;
+  padding: 5px;
   display: inline-grid; place-items: center;
   cursor: pointer;
 }
+.settings button svg { display: block; }
 .menu { display: flex; flex-direction: column; }
 .menu button {
   background: none; border: none;
@@ -225,7 +222,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 }
 /* overflow actions: the row's ⋯ toggles them; revealed light, borderless */
 .sheet-row .more { display: none; }
-.sheet-row.more-open .more { display: inline-grid; border: none; width: 34px; height: 40px; }
+.sheet-row.more-open .more { display: inline-grid; border: none; background: none; width: 34px; height: 40px; }
 .sheet-row.more-open .morebtn { transform: rotate(90deg); }
 .sheet-row.more-open .thumb, .sheet-row.more-open .when { display: none; }
 
@@ -392,7 +389,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   width: 36px; height: 36px;
   border: 1.5px solid var(--ink);
   border-radius: 50%;
-  background: none;
+  background: var(--paper);
   color: var(--ink);
   font-size: 15px;
   cursor: pointer;
