@@ -73,7 +73,7 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
       else if (kin[0]) { ctx.fillStyle = SKYHEX[kin[0].band]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
       else {
         ctx.strokeStyle = "rgba(182,65,46,0.45)";
-        ctx.lineWidth = 3.6;
+        ctx.lineWidth = 4.6;
         ctx.setLineDash([11, 13]);
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
       }
@@ -89,7 +89,7 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
         else if (m) { ctx.fillStyle = SKYHEX[m.band]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
         else {
           ctx.strokeStyle = "rgba(182,65,46,0.45)";
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 4;
           ctx.setLineDash([9, 11]);
           ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
         }

@@ -127,8 +127,8 @@ function relativeDay(iso) {
   const d = new Date(iso), now = new Date();
   const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = (day(now) - day(d)) / 86400000;
-  if (diff === 0) return "today";
-  if (diff === 1) return "yesterday";
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
