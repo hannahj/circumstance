@@ -394,22 +394,7 @@ async function loadBackup() {
 function renderCircumstances() {
   const box = $("repeats");
   const rows = [...captures].sort((a, b) => a.time < b.time ? 1 : -1);
-  box.innerHTML = '<div class="rc-title">Circumstances <button class="info" aria-label="about">i</button>' +
-    (captures.some(c => c.stamped) ? '<button class="info boardshare" aria-label="share board">\u2197</button>' : "") +
-    '</div>';
-  const infoBtn = box.querySelector(".info");
-  infoBtn.addEventListener("click", e => {
-    e.stopPropagation();
-    showTip(infoBtn, INFO_TEXT, 12000);
-  });
-  const bs = box.querySelector(".boardshare");
-  if (bs) bs.addEventListener("click", async e => {
-    e.stopPropagation();
-    bs.disabled = true;
-    const { places, weathers } = witnessed();
-    try { await shareBoard({ captures, places, weathers, bands: BANDS, glyph, deepened: !!lsGet("deepened") }); } catch {}
-    bs.disabled = false;
-  });
+  box.innerHTML = '<div class="rc-title">Circumstances</div>';
   for (const c of rows) {
     const pending = c.place === "pending" || c.weather === "pending";
     const row = document.createElement("div");
@@ -754,8 +739,28 @@ document.addEventListener("visibilitychange", () => {
   ping("open");
   $("readBtn").addEventListener("click", takeReading);
   $("capClose").addEventListener("click", endRitual);
-  $("bkSave").addEventListener("click", saveBackup);
-  $("bkLoad").addEventListener("click", loadBackup);
+  $("infoBtn").addEventListener("click", e => {
+    e.stopPropagation();
+    showTip($("infoBtn"), INFO_TEXT, 12000);
+  });
+  $("gearBtn").addEventListener("click", e => {
+    e.stopPropagation();
+    const gear = $("gearBtn");
+    const canExport = captures.some(c => c.stamped);
+    showTip(gear,
+      '<div class="menu">' +
+      (canExport ? '<button id="mExport">Export board image</button>' : "") +
+      '<button id="mBack">Back up</button>' +
+      '<button id="mRestore">Restore</button></div>', 15000);
+    const done = () => document.querySelectorAll(".tip").forEach(t => t.remove());
+    if (canExport) $("mExport").addEventListener("click", async () => {
+      done();
+      const { places, weathers } = witnessed();
+      try { await shareBoard({ captures, places, weathers, bands: BANDS, glyph, deepened: !!lsGet("deepened") }); } catch {}
+    });
+    $("mBack").addEventListener("click", () => { done(); saveBackup(); });
+    $("mRestore").addEventListener("click", () => { done(); loadBackup(); });
+  });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
   // then the archive arrives, however long it takes
