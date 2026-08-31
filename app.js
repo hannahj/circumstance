@@ -365,13 +365,6 @@ function renderCircumstances() {
       });
       row.appendChild(btn);
     }
-    if (!c.stamped && c.why && !pending) {
-      const up = document.createElement("button");
-      up.className = "play";
-      up.innerHTML = ICON_PROMOTE;
-      up.addEventListener("click", () => promoteCapture(c));
-      row.appendChild(up);
-    }
     const share = document.createElement("button");
     share.className = "play";
     share.innerHTML = ICON_SHARE;
@@ -381,14 +374,38 @@ function renderCircumstances() {
       share.disabled = false;
     });
     row.appendChild(share);
+    const more = document.createElement("button");
+    more.className = "play morebtn";
+    more.textContent = "\u22ef";
+    more.addEventListener("click", () => row.classList.add("more-open"));
+    row.appendChild(more);
+    if (!c.stamped && c.why && !pending) {
+      const up = document.createElement("button");
+      up.className = "play more";
+      up.innerHTML = ICON_PROMOTE;
+      up.addEventListener("click", () => promoteCapture(c));
+      row.appendChild(up);
+    }
     const del = document.createElement("button");
-    del.className = "play";
+    del.className = "play more";
     del.innerHTML = ICON_TRASH;
     del.addEventListener("click", async () => {
       if (!confirm("Delete this recording? Its photo and sound go with it.")) return;
       await removeCapture(c);
     });
     row.appendChild(del);
+
+    // tapping the row: placed recordings flash on the grid; kept ones explain themselves
+    row.addEventListener("click", e => {
+      if (e.target.closest("button") || e.target.closest("img")) return;
+      if (pending) return;
+      if (c.stamped) {
+        renderGrid({ place: c.place, weather: c.weather, band: c.band });
+        $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        showNote("A repeat circumstance \u2014 recorded and kept, but not on the grid.\n\nEvery mark needs its own place, at least 200 m from every other. The \u2191 swaps this one onto the grid; whatever it replaces is kept here.");
+      }
+    });
     box.appendChild(row);
   }
 }
