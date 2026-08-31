@@ -1,6 +1,6 @@
 // minimal shell cache so the sampler opens offline; network-first so updates land
-const CACHE = "circumstance-v7";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "sun.js", "weather.js", "classify.js", "db.js", "media.js", "share.js", "manifest.webmanifest"];
+const CACHE = "circumstance-v8";
+const SHELL = ["./", "index.html", "styles.css", "app.js", "sun.js", "weather.js", "classify.js", "db.js", "media.js", "share.js", "telemetry.js", "backup.js", "board-export.js", "manifest.webmanifest"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));

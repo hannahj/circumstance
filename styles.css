@@ -49,7 +49,7 @@ header {
 .counter { font-size: 12px; }
 
 .grid {
-  margin-top: var(--s4);
+  margin-top: var(--s5);
   display: grid;
   grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);
@@ -118,12 +118,25 @@ footer {
 
 /* the seed: one unlabeled mystery circle, the grid waiting to be planted */
 .grid.seed { display: block; }
-.seedwrap { display: grid; place-items: center; padding: var(--s3) 0 var(--s5); }
+.seedwrap { display: grid; place-items: center; padding: 0; }
 .seedhint {
-  margin-top: var(--s4);
+  margin-top: var(--s5);
   font-size: 13px;
   text-align: center;
   line-height: 1.7;
+}
+.vault {
+  margin-block: var(--s6);
+  display: flex; justify-content: center; align-items: center; gap: var(--s2);
+  font-size: 12px;
+}
+.vault button {
+  background: none; border: none; padding: var(--s1);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
 }
 .rc-title .info {
   width: 20px; height: 20px;

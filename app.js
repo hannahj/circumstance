@@ -4,6 +4,9 @@ import { classifyPlace, takeEvidence } from "./classify.js";
 import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
 import { startAllMedia, videoStreamRef, waveLevels, snapPhoto, finishMedia } from "./media.js";
 import { shareCapture } from "./share.js";
+import { ping } from "./telemetry.js";
+import { makeBackup, readBackup } from "./backup.js";
+import { shareBoard } from "./board-export.js";
 
 // rules
 const MIN_DIST_M = 200;      // spatial uniqueness: every mark on the grid from a different place
@@ -343,7 +346,11 @@ function showTip(anchor, html, ms = 3200) {
   const r = anchor.getBoundingClientRect();
   tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
   tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + "px";
-  const dismiss = () => { tip.remove(); document.removeEventListener("pointerdown", dismiss, true); };
+  const dismiss = e => {
+    if (e && e.target && e.target.closest && e.target.closest(".tip")) return;
+    tip.remove();
+    document.removeEventListener("pointerdown", dismiss, true);
+  };
   setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 50);
   setTimeout(dismiss, ms);
 }
@@ -353,12 +360,56 @@ const INFO_TEXT =
   "Record unique circumstances, based on time, location, and weather.\n\n" +
   "Recordings include ten seconds of sound and one photograph and are only stored on your device.";
 
+async function saveBackup() {
+  const blob = await makeBackup(captures);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "circumstance-backup.json";
+  a.click();
+}
+async function loadBackup() {
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = "application/json,.json";
+  inp.addEventListener("change", async () => {
+    try {
+      const rows = await readBackup(inp.files[0]);
+      const have = new Set(captures.map(c => c.time));
+      let added = 0;
+      for (const r of rows) {
+        if (have.has(r.time)) continue;
+        r.id = await addCapture(r);
+        captures.push(r);
+        added++;
+      }
+      renderGrid();
+      flashStatus(added ? "Restored " + added + " recording" + (added === 1 ? "" : "s") + "." : "Nothing new in that file.");
+    } catch {
+      flashStatus("Couldn't read that backup.");
+    }
+  });
+  inp.click();
+}
+
 function renderCircumstances() {
   const box = $("repeats");
   const rows = [...captures].sort((a, b) => a.time < b.time ? 1 : -1);
-  box.innerHTML = '<div class="rc-title">Circumstances <button class="info" aria-label="about">i</button></div>';
+  box.innerHTML = '<div class="rc-title">Circumstances <button class="info" aria-label="about">i</button>' +
+    (captures.some(c => c.stamped) ? '<button class="info boardshare" aria-label="share board">\u2197</button>' : "") +
+    '</div>';
   const infoBtn = box.querySelector(".info");
-  infoBtn.addEventListener("click", e => { e.stopPropagation(); showTip(infoBtn, INFO_TEXT, 12000); });
+  infoBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    showTip(infoBtn, INFO_TEXT, 12000);
+  });
+  const bs = box.querySelector(".boardshare");
+  if (bs) bs.addEventListener("click", async e => {
+    e.stopPropagation();
+    bs.disabled = true;
+    const { places, weathers } = witnessed();
+    try { await shareBoard({ captures, places, weathers, bands: BANDS, glyph, deepened: !!lsGet("deepened") }); } catch {}
+    bs.disabled = false;
+  });
   for (const c of rows) {
     const pending = c.place === "pending" || c.weather === "pending";
     const row = document.createElement("div");
@@ -627,6 +678,7 @@ async function takeReading() {
   }
   capture.id = await addCapture(capture);
   captures.push(capture);
+  ping("recording");
 
   if (capture.stamped) landStamp(capture);
   else {
@@ -699,8 +751,11 @@ document.addEventListener("visibilitychange", () => {
 (async function init() {
   // paint and wire everything synchronously: no data load may delay the page
   renderGrid();
+  ping("open");
   $("readBtn").addEventListener("click", takeReading);
   $("capClose").addEventListener("click", endRitual);
+  $("bkSave").addEventListener("click", saveBackup);
+  $("bkLoad").addEventListener("click", loadBackup);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
   // then the archive arrives, however long it takes

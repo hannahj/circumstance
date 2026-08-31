@@ -33,6 +33,49 @@ function race(query, timeoutMs) {
 
 export default {
   async fetch(request, env, ctx) {
+    const url0 = new URL(request.url);
+    if (url0.pathname === "/stats") {
+      // private: requires the STATS_KEY secret; the API token never leaves the worker
+      if (!env.STATS_KEY || url0.searchParams.get("k") !== env.STATS_KEY)
+        return new Response("forbidden", { status: 403, headers: CORS });
+      const days = Math.min(90, Math.max(1, +url0.searchParams.get("days") || 30));
+      const sql = `SELECT timestamp, blob1, index1 FROM circumstance_pings ` +
+                  `WHERE timestamp > NOW() - INTERVAL '${days}' DAY FORMAT JSON`;
+      const r = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`,
+        { method: "POST", headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` }, body: sql }
+      );
+      if (!r.ok) return new Response("query failed: " + r.status, { status: 502, headers: CORS });
+      const rows = (await r.json()).data || [];
+      const byDay = {}, idDays = {}, allIds = new Set();
+      let recordings = 0;
+      for (const row of rows) {
+        const day = String(row.timestamp).slice(0, 10);
+        const d = byDay[day] || (byDay[day] = { opens: 0, recordings: 0, ids: new Set() });
+        if (row.blob1 === "open") { d.opens++; d.ids.add(row.index1); }
+        if (row.blob1 === "recording") { d.recordings++; recordings++; }
+        allIds.add(row.index1);
+        (idDays[row.index1] || (idDays[row.index1] = new Set())).add(day);
+      }
+      const daysOut = Object.keys(byDay).sort().map(day => ({
+        day, opens: byDay[day].opens, recordings: byDay[day].recordings, players: byDay[day].ids.size,
+      }));
+      const returning = Object.values(idDays).filter(s => s.size > 1).length;
+      return new Response(JSON.stringify({
+        rangeDays: days, players: allIds.size, returning, recordings, days: daysOut,
+      }), { headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+    if (url0.pathname === "/ping") {
+      if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+      if (request.method === "POST") {
+        try {
+          const { e, id } = await request.json();
+          if (env.CIRCS && typeof e === "string" && typeof id === "string")
+            env.CIRCS.writeDataPoint({ blobs: [e.slice(0, 32)], indexes: [id.slice(0, 64)] });
+        } catch {}
+        return new Response("ok", { headers: CORS });
+      }
+    }
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
     if (request.method !== "POST") return new Response("POST only", { status: 405, headers: CORS });
     const query = await request.text();
