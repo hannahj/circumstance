@@ -11,7 +11,7 @@ import { shareBoard } from "./board-export.js";
 // rules
 const MIN_DIST_M = 200;      // spatial uniqueness: every mark on the grid from a different place
 const RITUAL_MS = 10000;     // reading cap (fixed duration in tap mode)
-const VIDEO = new URLSearchParams(location.search).has("video"); // ?video=1: clip-capture experiment
+const VIDEO = new URLSearchParams(location.search).get("video") !== "0"; // clip capture is the default; ?video=0 restores photo+sound
 const HOLD = VIDEO || new URLSearchParams(location.search).has("hold"); // video implies hold-to-record
 const HOLD_MIN_MS = 1000;    // shorter holds reset gently instead of minting junk
 const GOOD_FIX_M = 25;       // accuracy above this gets flagged on the record
@@ -190,13 +190,27 @@ const ICON_TRASH = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 
 const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 
+// one sentence per refusal, in plain words
+function refusalText(s) {
+  if (s.why === "already marked")
+    return "Kept \u00b7 this square is already marked in this light (flashing)";
+  if (s.dist !== undefined)
+    return "Kept \u00b7 too near an earlier mark \u2014 " + s.dist + " m from the flashing one";
+  return "Kept \u00b7 " + s.why;
+}
+
 // ---- rules: one place, one mark ----
 function tryStamp(capture, ignoreId) {
   const marks = captures.filter(c => c.stamped && c.id !== ignoreId);
   const slot = marks.find(c => c.place === capture.place && c.weather === capture.weather && c.band === capture.band);
   if (slot) return { stamped: false, why: "already marked", conflict: slot };
   const near = marks.find(c => distM(c.lat, c.lon, capture.lat, capture.lon) < MIN_DIST);
-  if (near) return { stamped: false, why: "too near an earlier mark", conflict: near };
+  if (near) return {
+    stamped: false,
+    why: "too near an earlier mark",
+    conflict: near,
+    dist: Math.round(distM(near.lat, near.lon, capture.lat, capture.lon)),
+  };
   return { stamped: true };
 }
 
@@ -776,6 +790,7 @@ async function takeReading() {
     capture.stamped = s.stamped;
     capture.why = s.why;
     refusedBy = s.conflict || null;
+    if (s.dist !== undefined) capture.refusedDist = s.dist;
   }
   capture.id = await addCapture(capture);
   captures.push(capture);
@@ -784,7 +799,7 @@ async function takeReading() {
   if (capture.stamped) landStamp(capture);
   else {
     renderGrid(refusedBy ? { place: refusedBy.place, weather: refusedBy.weather, band: refusedBy.band } : undefined);
-    if (capture.why) flashStatus("Kept \u00b7 " + capture.why + (refusedBy ? " (flashing)" : ""));
+    if (capture.why) flashStatus(refusalText({ why: capture.why, dist: capture.refusedDist }));
     else flashStatus("Recorded \u00b7 resolving\u2026");
   }
   $("readBtn").disabled = false;
@@ -799,13 +814,18 @@ async function takeReading() {
       changed = true;
     }
     if (changed) {
+      let late = null;
       if (!capture.stamped && !capture.why && capture.place !== "pending" && capture.weather !== "pending") {
-        const s = tryStamp(capture);
-        capture.stamped = s.stamped;
-        capture.why = s.why;
+        late = tryStamp(capture);
+        capture.stamped = late.stamped;
+        capture.why = late.why;
       }
       await putCapture(capture);
-      if (capture.stamped) landStamp(capture); else renderGrid();
+      if (capture.stamped) landStamp(capture);
+      else if (late && late.conflict) {
+        renderGrid({ place: late.conflict.place, weather: late.conflict.weather, band: late.conflict.band });
+        flashStatus(refusalText(late));
+      } else renderGrid();
     }
   });
 }
