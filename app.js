@@ -955,6 +955,17 @@ document.addEventListener("visibilitychange", () => {
     captures = [];
     console.error("capture load failed", e);
   }
+  // one-time repack: legacy Blob-stored media becomes ArrayBuffer-stored (Safari reliability)
+  if (!lsGet("packedV1")) {
+    let dead = 0;
+    for (const c of captures) {
+      try { await putCapture(c); }
+      catch { dead++; }
+    }
+    if (!dead) lsSet("packedV1", "1");
+    else flashStatus(dead + " recording(s) have unreadable media \u2014 delete and re-record them.");
+  }
+
   // repair: captures saved with an object where the band string belongs
   let repaired = false;
   for (const c of captures) {

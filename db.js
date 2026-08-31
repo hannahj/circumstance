@@ -22,19 +22,39 @@ async function getDB() {
 
 export function isEphemeral() { return !!memory; }
 
-function tx(db, mode, fn) {
+function tx(db, mode, fn, packed) {
   return new Promise((res, rej) => {
     const t = db.transaction("captures", mode);
-    const out = fn(t.objectStore("captures"));
+    const out = fn(t.objectStore("captures"), packed);
     t.oncomplete = () => res(out && out.result !== undefined ? out.result : undefined);
     t.onerror = () => rej(t.error);
   });
 }
 
+// Safari can lose the ability to read Blobs stored in IndexedDB; raw ArrayBuffers are
+// reliable. Media is packed to buffers on write and rebuilt into Blobs on read.
+const MEDIA = ["photo", "audio", "video"];
+async function pack(capture) {
+  const row = { ...capture };
+  for (const k of MEDIA) {
+    if (row[k] instanceof Blob) row[k] = { __buf: await row[k].arrayBuffer(), type: row[k].type };
+  }
+  return row;
+}
+function unpack(row) {
+  for (const k of MEDIA) {
+    if (row[k] && row[k].__buf) row[k] = new Blob([row[k].__buf], { type: row[k].type });
+  }
+  return row;
+}
+export function isPacked(row) {
+  return MEDIA.every(k => !(row[k] instanceof Blob));
+}
+
 export async function addCapture(capture) {
   const db = await getDB();
   if (!db) { capture.id = memory.next++; memory.rows.push(capture); return capture.id; }
-  return tx(db, "readwrite", store => store.add(capture));
+  return tx(db, "readwrite", (store, row) => store.add(row), await pack(capture));
 }
 
 export async function putCapture(capture) {
@@ -44,7 +64,7 @@ export async function putCapture(capture) {
     if (i >= 0) memory.rows[i] = capture; else memory.rows.push(capture);
     return capture.id;
   }
-  return tx(db, "readwrite", store => store.put(capture));
+  return tx(db, "readwrite", (store, row) => store.put(row), await pack(capture));
 }
 
 export async function deleteCapture(id) {
@@ -59,7 +79,7 @@ export async function allCaptures() {
   return new Promise((res, rej) => {
     const t = db.transaction("captures", "readonly");
     const req = t.objectStore("captures").getAll();
-    req.onsuccess = () => res(req.result);
+    req.onsuccess = () => res(req.result.map(unpack));
     req.onerror = () => rej(req.error);
   });
 }
