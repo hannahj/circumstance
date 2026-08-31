@@ -114,16 +114,31 @@ footer {
 }
 .read:active { transform: scale(0.97); }
 .read:disabled { opacity: 0.35; }
-/* after the first reveal: the button breathes twice — the only tutorial */
-.read.nudge { animation: nudge 1.1s ease 2; }
-@keyframes nudge {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.07); }
 }
 
 /* the seed: one unlabeled mystery circle, the grid waiting to be planted */
 .grid.seed { display: block; }
 .seedwrap { display: grid; place-items: center; padding: var(--s6) 0; }
+.seedhint {
+  margin-top: var(--s5);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.7;
+}
+.rc-title .info {
+  width: 20px; height: 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  vertical-align: 2px;
+  margin-left: var(--s2);
+}
 .seedcircle {
   width: 96px; height: 96px;
   border-radius: 50%;
@@ -236,11 +251,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 }
 .capture.audio-live #wave { display: block; }
 /* on = inked (pressed stamp); off = outline with slash */
-.capture.video-live .capture.video-live .reveal-coin { width: 150px; height: 150px; border-radius: 50%; }
-.reveal-glyphs { display: flex; gap: var(--s4); }
-.reveal-glyphs svg { width: 44px; height: 44px; }
-.intro-title { font-size: 20px; letter-spacing: 0.2em; }
-#introOverlay { gap: calc(var(--s5) * 2); }
+.capture.video-live .capture.video-live #introOverlay { gap: calc(var(--s5) * 2); }
 .note { font-size: 12.5px; text-align: center; max-width: 280px; line-height: 1.6; white-space: pre-line; }
 #photoFull { max-width: 92vw; max-height: 80vh; border: 1.5px solid var(--ink); border-radius: 4px; }
 

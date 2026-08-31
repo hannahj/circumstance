@@ -45,8 +45,6 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const PAPER = "#f4f0e6", INKHEX = "#b6412e";
 let ritualActive = false;
 
-// intro decision happens before the page is allowed to paint
-if (!lsGet("circIntroSeen")) $("introOverlay").classList.add("open");
 document.body.classList.remove("booting");
 let captures = [];
 let lastFix = null;
@@ -256,7 +254,7 @@ function renderGrid(highlight, opts = {}) {
 
   if (stage === "seed") {
     grid.style.gridTemplateColumns = "1fr";
-    grid.innerHTML = '<div class="seedwrap"><div class="seedcircle"></div></div>';
+    grid.innerHTML = '<div class="seedwrap"><div class="seedcircle"></div><div class="seedhint">Take this outside.<br>Fill it slowly.</div></div>';
   } else {
     const { places, weathers } = witnessed();
     grid.classList.toggle("wide", weathers.length === 4);
@@ -351,11 +349,17 @@ function showTip(anchor, html) {
 }
 
 // ---- the circumstances list: every recording, always up ----
+const INFO_TEXT =
+  "A recorder for unique circumstances \u2014 where you stand, what the sky is doing, the hour.\n\n" +
+  "Each recording keeps ten seconds of sound and a photograph.\n\n" +
+  "Everything stays on your device. Nothing is uploaded. To read the sky and surroundings, " +
+  "your coordinates are checked against public weather and map services \u2014 with nothing about you attached.";
+
 function renderCircumstances() {
   const box = $("repeats");
   const rows = [...captures].sort((a, b) => a.time < b.time ? 1 : -1);
-  if (!rows.length) { box.innerHTML = ""; return; }
-  box.innerHTML = '<div class="rc-title">Circumstances</div>';
+  box.innerHTML = '<div class="rc-title">Circumstances <button class="info" aria-label="about">i</button></div>';
+  box.querySelector(".info").addEventListener("click", () => showNote(INFO_TEXT));
   for (const c of rows) {
     const pending = c.place === "pending" || c.weather === "pending";
     const row = document.createElement("div");
@@ -633,22 +637,6 @@ async function takeReading() {
   }
   $("readBtn").disabled = false;
 
-  if (!lsGet("firstRevealSeen")) {
-    lsSet("firstRevealSeen", "1");
-    $("revealCoin").style.background = SKY[capture.band];
-    $("revealGlyphs").innerHTML =
-      (capture.place !== "pending" ? glyph(capture.place, 44) : "") +
-      (capture.weather !== "pending" ? glyph(capture.weather, 44) : "");
-    const ro = $("revealOverlay");
-    ro.classList.add("open");
-    ro.onclick = () => {
-      ro.classList.remove("open");
-      const btn = $("readBtn");
-      btn.classList.add("nudge");
-      btn.addEventListener("animationend", () => btn.classList.remove("nudge"), { once: true });
-    };
-  }
-
   // if the ritual's fetches land late, the answers are still kept
   work.then(async () => {
     let changed = false;
@@ -710,14 +698,6 @@ document.addEventListener("visibilitychange", () => {
 
 // ---- init ----
 (async function init() {
-  if (!lsGet("circIntroSeen")) {
-    $("beginBtn").addEventListener("click", () => {
-      lsSet("circIntroSeen", "1");
-      $("introOverlay").classList.remove("open");
-      takeReading(); // the first recording IS the tutorial
-    });
-  }
-
   // paint and wire everything synchronously: no data load may delay the page
   renderGrid();
   $("readBtn").addEventListener("click", takeReading);
