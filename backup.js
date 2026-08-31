@@ -15,11 +15,12 @@ const deb64 = (b64s, type) => {
 export async function makeBackup(captures) {
   const rows = [];
   for (const c of captures) {
-    const { photo, audio, id, ...rest } = c;
+    const { photo, audio, video, id, ...rest } = c;
     rows.push({
       ...rest,
       photo: photo ? await b64(photo) : null, photoType: photo ? photo.type : null,
       audio: audio ? await b64(audio) : null, audioType: audio ? audio.type : null,
+      video: video ? await b64(video) : null, videoType: video ? video.type : null,
     });
   }
   return new Blob([JSON.stringify({ app: "circumstance", v: 1, rows })], { type: "application/json" });
@@ -29,11 +30,12 @@ export async function readBackup(file) {
   const d = JSON.parse(await file.text());
   if (d.app !== "circumstance" || !Array.isArray(d.rows)) throw new Error("not a circumstance backup");
   return d.rows.map(r => {
-    const { photo, photoType, audio, audioType, ...rest } = r;
+    const { photo, photoType, audio, audioType, video, videoType, ...rest } = r;
     return {
       ...rest,
       photo: photo ? deb64(photo, photoType) : null,
       audio: audio ? deb64(audio, audioType) : null,
+      video: video ? deb64(video, videoType) : null,
     };
   });
 }

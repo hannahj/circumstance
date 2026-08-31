@@ -129,3 +129,35 @@ export function finishMedia() {
     } else { recorder = null; cleanup(); res(null); }
   });
 }
+
+// ---- clip recording (?video=1 experiment): camera+mic into one short video ----
+let clipRec = null, clipChunks = [];
+function clipMime() {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const t of ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm"])
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  return null;
+}
+export function startClip() {
+  if (!videoStream || !videoStream.getVideoTracks().length) return false;
+  const mime = clipMime();
+  if (!mime) return false;
+  const tracks = [
+    ...videoStream.getVideoTracks(),
+    ...(audioStream ? audioStream.getAudioTracks() : []),
+  ];
+  clipChunks = [];
+  clipRec = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 2_500_000 });
+  clipRec.ondataavailable = e => { if (e.data.size) clipChunks.push(e.data); };
+  clipRec.start();
+  return true;
+}
+export function stopClip() {
+  return new Promise(res => {
+    if (!clipRec || clipRec.state === "inactive") { clipRec = null; return res(null); }
+    const r = clipRec;
+    clipRec = null;
+    r.onstop = () => res(clipChunks.length ? new Blob(clipChunks, { type: r.mimeType }) : null);
+    r.stop();
+  });
+}

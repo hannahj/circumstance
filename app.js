@@ -2,7 +2,7 @@ import { timeBand } from "./sun.js";
 import { fetchWeatherNow, backfillWeather } from "./weather.js";
 import { classifyPlace, takeEvidence } from "./classify.js";
 import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
-import { startAllMedia, videoStreamRef, waveLevels, snapPhoto, finishMedia } from "./media.js";
+import { startAllMedia, videoStreamRef, waveLevels, snapPhoto, finishMedia, startClip, stopClip } from "./media.js";
 import { shareCapture } from "./share.js";
 import { ping } from "./telemetry.js";
 import { makeBackup, readBackup } from "./backup.js";
@@ -10,7 +10,10 @@ import { shareBoard } from "./board-export.js";
 
 // rules
 const MIN_DIST_M = 200;      // spatial uniqueness: every mark on the grid from a different place
-const RITUAL_MS = 10000;     // fixed reading duration
+const RITUAL_MS = 10000;     // reading cap (fixed duration in tap mode)
+const VIDEO = new URLSearchParams(location.search).has("video"); // ?video=1: clip-capture experiment
+const HOLD = VIDEO || new URLSearchParams(location.search).has("hold"); // video implies hold-to-record
+const HOLD_MIN_MS = 1000;    // shorter holds reset gently instead of minting junk
 const GOOD_FIX_M = 25;       // accuracy above this gets flagged on the record
 
 const PLACES = ["forest", "water", "open", "built"];
@@ -151,6 +154,20 @@ function showNote(text) {
   const o = $("noteOverlay");
   o.classList.add("open");
   o.onclick = () => o.classList.remove("open");
+}
+
+function showClip(videoBlob) {
+  const o = $("photoOverlay");
+  const v = $("clipFull");
+  v.src = URL.createObjectURL(videoBlob);
+  o.classList.add("open", "clip");
+  v.play().catch(() => {});
+  o.onclick = e => {
+    if (e.target === v) return;
+    v.pause();
+    v.removeAttribute("src");
+    o.classList.remove("open", "clip");
+  };
 }
 
 function showPhoto(blob, audioBlob) {
@@ -416,7 +433,7 @@ function renderCircumstances() {
       const img = document.createElement("img");
       img.className = "thumb";
       img.src = photoURL(c);
-      img.addEventListener("click", () => showPhoto(c.photo, c.audio));
+      img.addEventListener("click", () => c.video ? showClip(c.video) : showPhoto(c.photo, c.audio));
       row.appendChild(img);
     }
     if (c.audio) {
@@ -566,6 +583,71 @@ function readyPhase() {
   });
 }
 
+// hold-to-record (dev experiment): press grows the ring, release seals; too-short holds reset
+function holdPhase(overlay) {
+  return new Promise(res => {
+    cancelFns.push(() => res(false));
+    capPhase("ready");
+    const wctx = $("wave").getContext("2d");
+    let holding = false, t0 = 0, sealed = false;
+    const cleanup = () => {
+      overlay.removeEventListener("pointerdown", down);
+      overlay.removeEventListener("pointerup", up);
+      overlay.removeEventListener("pointercancel", up);
+    };
+    const seal = () => {
+      if (sealed) return;
+      sealed = true;
+      cleanup();
+      res(Date.now() - t0);
+    };
+    const down = e => {
+      if (sealed || e.target.closest(".close")) return;
+      holding = true;
+      t0 = Date.now();
+      if (VIDEO) startClip();
+      capPhase("reading");
+    };
+    const up = () => {
+      if (!holding || sealed) return;
+      holding = false;
+      if (Date.now() - t0 >= HOLD_MIN_MS) seal();
+      else {
+        if (VIDEO) stopClip(); // discard the graze
+        capPhase("ready");
+      }
+    };
+    overlay.addEventListener("pointerdown", down);
+    overlay.addEventListener("pointerup", up);
+    overlay.addEventListener("pointercancel", up);
+    (function frame() {
+      if (!ritualActive) { cleanup(); return res(false); }
+      if (sealed) return;
+      const ov2 = overlay.classList.contains("video-live");
+      const stroke = ov2 ? PAPER : "var(--ink)";
+      const track = ov2 ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
+      if (!holding) {
+        const pulse = 6 + 2 * Math.sin(Date.now() / 320);
+        $("ring").innerHTML =
+          `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
+          `<circle r="${pulse.toFixed(1)}" fill="${stroke}"/>`;
+      } else {
+        const t = Math.min(1, (Date.now() - t0) / RITUAL_MS);
+        const a = Math.min(t, 0.9999) * 2 * Math.PI;
+        const x = 80 * Math.sin(a), y = -80 * Math.cos(a);
+        const large = a > Math.PI ? 1 : 0;
+        $("ring").innerHTML =
+          `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
+          (t > 0.01 ? `<path d="M0 -80 A80 80 0 ${large} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round"/>` : "") +
+          (ov2 ? "" : `<circle r="6" fill="var(--ink)"/>`);
+        if (t >= 1) return seal(); // the ring closes: a full reading even mid-hold
+      }
+      drawWave(wctx, ov2);
+      requestAnimationFrame(frame);
+    })();
+  });
+}
+
 // ---- the recording ----
 async function takeReading() {
   if (ritualActive) return;
@@ -605,7 +687,12 @@ async function takeReading() {
     ]);
   }).catch(() => {});
 
-  // ready: the player frames, listens, and taps when they choose
+  // ready: the player frames, listens, and chooses the moment
+  let heldMs = null;
+  if (HOLD) {
+    heldMs = await holdPhase(overlay);
+    if (!heldMs || !ritualActive) return;
+  } else {
   if (!await readyPhase()) return;
   if (!ritualActive) return;
 
@@ -631,11 +718,14 @@ async function takeReading() {
       if (t < 1) requestAnimationFrame(frame); else done();
     })();
   });
+  }
   if (!ritualActive) return;
 
-  // close of the ring: take the frame, seal the sound
+  // close of the ring: seal the clip, take the poster frame, stop the senses
+  const clip = VIDEO ? await stopClip() : null;
   const photo = overlay.classList.contains("video-live") ? await snapPhoto(viewfinder) : null;
-  const audio = await finishMedia();
+  let audio = await finishMedia();
+  if (clip) audio = null; // the clip carries the sound
   ritualActive = false;
   overlay.classList.remove("video-live", "audio-live");
   viewfinder.srcObject = null;
@@ -663,6 +753,8 @@ async function takeReading() {
     place: place || "pending",
     stamped: false,
   };
+  if (heldMs) capture.heldMs = heldMs;
+  if (clip) capture.video = clip;
   if (capture0Evidence) capture.placeEvidence = capture0Evidence;
   if (weather?.backfilled) capture.weatherBackfilled = true;
   if (FORCE.weather) { capture.weather = FORCE.weather; capture.devForced = true; }
@@ -748,6 +840,8 @@ document.addEventListener("visibilitychange", () => {
 // ---- init ----
 (async function init() {
   // paint and wire everything synchronously: no data load may delay the page
+  if (HOLD) document.querySelector(".capthint").textContent = "HOLD TO RECORD";
+  if (VIDEO) flashStatus("clip mode");
   renderGrid();
   ping("open");
   $("readBtn").addEventListener("click", takeReading);

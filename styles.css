@@ -232,6 +232,10 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   line-height: 1.5;
 }
 
+#clipFull { display: none; max-width: 92vw; max-height: 78vh; border-radius: 6px; }
+.overlay.photo.clip #clipFull { display: block; }
+.overlay.photo.clip #photoFull { display: none; }
+
 /* overlays: the ritual, a note (errors), a photo viewer */
 .overlay {
   position: fixed; inset: 0;
