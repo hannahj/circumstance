@@ -202,7 +202,8 @@ function tryStamp(capture, ignoreId) {
 
 async function reEvaluateAll() {
   const waiting = captures
-    .filter(x => !x.stamped && x.why && x.place !== "pending" && x.weather !== "pending")
+    .filter(x => !x.stamped && x.why && x.why !== "swapped out" &&
+                 x.place !== "pending" && x.weather !== "pending")
     .sort((a, b) => a.time < b.time ? -1 : 1);
   let promoted = null;
   for (const x of waiting) {
@@ -769,10 +770,12 @@ async function takeReading() {
   if (FORCE.place) { capture.place = FORCE.place; capture.devForced = true; }
   if (FORCE.band) { capture.band = FORCE.band; capture.devForced = true; }
 
+  let refusedBy = null;
   if (capture.place !== "pending" && capture.weather !== "pending") {
     const s = tryStamp(capture);
     capture.stamped = s.stamped;
     capture.why = s.why;
+    refusedBy = s.conflict || null;
   }
   capture.id = await addCapture(capture);
   captures.push(capture);
@@ -780,8 +783,8 @@ async function takeReading() {
 
   if (capture.stamped) landStamp(capture);
   else {
-    renderGrid();
-    if (capture.why) flashStatus("Kept \u00b7 " + capture.why);
+    renderGrid(refusedBy ? { place: refusedBy.place, weather: refusedBy.weather, band: refusedBy.band } : undefined);
+    if (capture.why) flashStatus("Kept \u00b7 " + capture.why + (refusedBy ? " (flashing)" : ""));
     else flashStatus("Recorded \u00b7 resolving\u2026");
   }
   $("readBtn").disabled = false;

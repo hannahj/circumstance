@@ -72,7 +72,12 @@ header {
 .grid > svg { justify-self: center; }
 /* row-label glyphs hang from the paper's left edge, aligned with the title */
 .grid > svg.rowg { justify-self: center; }
-.grid > svg.colg { justify-self: center; margin-bottom: 3px; }
+.grid > svg.colg { justify-self: center; align-self: end; margin-bottom: 2px; }
+/* the glyphs carry different internal bottom padding (48-grid); level their visual feet */
+.grid > svg.colg[aria-label="clear"] { transform: translateY(3px); }
+.grid > svg.colg[aria-label="cloud"] { transform: translateY(4px); }
+.grid > svg.colg[aria-label="rain"]  { transform: translateY(2px); }
+.grid > svg.colg[aria-label="snow"]  { transform: translateY(0); }
 .cell {
   aspect-ratio: 1;
   border: 1.5px solid var(--ink);
