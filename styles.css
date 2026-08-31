@@ -18,10 +18,11 @@
 /* nothing paints until the script decides whether the intro shows */
 .booting .page { visibility: hidden; }
 html, body { height: 100%; }
+html { background: var(--paper2); }
 body {
   margin: 0;
   overflow-x: hidden;
-  background: var(--paper);
+  background: var(--paper2);
   color: var(--ink);
   font-family: var(--mono);
   display: flex;
@@ -41,7 +42,7 @@ header {
   padding-block: var(--s3);
   background: var(--paper2);
 }
-.brand { font-size: 16px; font-weight: 600; letter-spacing: 0.12em; }
+.brand { font-size: 16px; font-weight: 600; letter-spacing: 0.12em; line-height: 1; display: flex; align-items: center; }
 .devbadge { font-size: 11px; margin-left: var(--s2); }
 .devbadge:empty { display: none; }
 header {
@@ -53,6 +54,11 @@ header {
 .title { font-size: 15px; letter-spacing: 0.14em; }
 .counter { font-size: 12px; }
 
+.field {
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+  background: var(--paper);
+}
 .grid {
   margin-top: var(--s2);
   display: grid;
@@ -95,14 +101,19 @@ header {
 
 footer {
   display: flex; flex-direction: column; align-items: center;
-  margin-block: var(--s5) var(--s6);
+  margin-block: var(--s3);
 }
+footer:has(.status:empty) { margin-block: 0; }
 .status { margin-bottom: var(--s2); }
 .almanac { width: 100%; text-align: center; }
 .almanac svg { display: block; width: 100%; }
 .status { font-size: 12px; }
 .status:empty { display: none; }
 .read {
+  position: fixed;
+  right: var(--s4); bottom: var(--s4);
+  z-index: 40;
+  background: var(--paper);
   -webkit-appearance: none;
   appearance: none;
   height: 52px; flex-shrink: 0;
@@ -197,6 +208,7 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
 /* the circumstances list (was: repeat circumstance) */
 .lower {
   flex: 1;
+  padding-bottom: 84px; /* room for the floating REC */
   margin-inline: calc(50% - 50vw);
   padding-inline: calc(50vw - 50%);
   padding-top: var(--s4);
@@ -232,8 +244,14 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   line-height: 1.5;
 }
 
-#clipFull { display: none; max-width: 92vw; max-height: 78vh; border-radius: 6px; }
-.overlay.photo.clip #clipFull { display: block; }
+#clipFull { display: none; }
+.overlay.photo.clip #clipFull {
+  display: block;
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.overlay.photo.clip .close { z-index: 6; }
 .overlay.photo.clip #photoFull { display: none; }
 
 /* overlays: the ritual, a note (errors), a photo viewer */

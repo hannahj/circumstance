@@ -193,10 +193,10 @@ const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M
 // ---- rules: one place, one mark ----
 function tryStamp(capture, ignoreId) {
   const marks = captures.filter(c => c.stamped && c.id !== ignoreId);
-  if (marks.some(c => c.place === capture.place && c.weather === capture.weather && c.band === capture.band))
-    return { stamped: false, why: "already marked" };
-  if (marks.some(c => distM(c.lat, c.lon, capture.lat, capture.lon) < MIN_DIST))
-    return { stamped: false, why: "too near an earlier mark" };
+  const slot = marks.find(c => c.place === capture.place && c.weather === capture.weather && c.band === capture.band);
+  if (slot) return { stamped: false, why: "already marked", conflict: slot };
+  const near = marks.find(c => distM(c.lat, c.lon, capture.lat, capture.lon) < MIN_DIST);
+  if (near) return { stamped: false, why: "too near an earlier mark", conflict: near };
   return { stamped: true };
 }
 
@@ -227,7 +227,7 @@ async function promoteCapture(c) {
   const occupant = captures.find(x =>
     x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
   const s = tryStamp(c, occupant ? occupant.id : undefined);
-  if (!s.stamped) return { ok: false, why: s.why };
+  if (!s.stamped) return { ok: false, why: s.why, conflict: s.conflict };
   if (occupant) {
     occupant.stamped = false;
     occupant.why = "swapped out";
@@ -250,7 +250,7 @@ function photoURL(c) {
 function markHTML(c) {
   const u = photoURL(c);
   return u
-    ? `<img src="${u}" alt="">`
+    ? `<img src="${u}" data-id="${c.id}" alt="">`
     : `<svg viewBox="-14 -14 28 28"><circle r="12.5" fill="${SKY[c.band]}"/></svg>`;
 }
 function resolvedCaptures() {
@@ -465,8 +465,16 @@ function renderCircumstances() {
       up.innerHTML = ICON_PROMOTE;
       up.addEventListener("click", async () => {
         const r = await promoteCapture(c);
-        if (r.ok) $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
-        else showTip(row, "Can't swap \u2014 " + r.why + ".");
+        if (r.ok) {
+          $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
+        } else if (r.conflict) {
+          // show the blocker itself: flash it on the grid and say why beside it
+          renderGrid({ place: r.conflict.place, weather: r.conflict.weather, band: r.conflict.band });
+          $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
+          flashStatus("Can't swap \u2014 " + r.why + " (flashing).");
+        } else {
+          showTip(row, "Can't swap \u2014 " + r.why + ".");
+        }
       });
       row.appendChild(up);
     }
@@ -845,6 +853,12 @@ document.addEventListener("visibilitychange", () => {
   renderGrid();
   ping("open");
   $("readBtn").addEventListener("click", takeReading);
+  $("grid").addEventListener("click", e => {
+    const img = e.target.closest && e.target.closest("img[data-id]");
+    if (!img) return;
+    const c = captures.find(x => String(x.id) === img.dataset.id);
+    if (c) c.video ? showClip(c.video) : showPhoto(c.photo, c.audio);
+  });
   $("capClose").addEventListener("click", endRitual);
   $("infoBtn").addEventListener("click", e => {
     e.stopPropagation();
