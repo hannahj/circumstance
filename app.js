@@ -2,12 +2,11 @@ import { timeBand, sunTimes } from "./sun.js";
 import { fetchWeatherNow, backfillWeather } from "./weather.js";
 import { classifyPlace, takeEvidence } from "./classify.js";
 import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
-import { getMediaPrefs, saveMediaPrefs, startVideo, startAudio, stopVideo, stopAudio,
-         videoStreamRef, audioActive, waveLevels, snapPhoto, finishMedia } from "./media.js";
+import { startAllMedia, videoStreamRef, waveLevels, snapPhoto, finishMedia } from "./media.js";
 import { shareCapture } from "./share.js";
 
 // rules
-const MIN_DIST_M = 500;      // spatial uniqueness: min distance between a cell's captures
+const MIN_DIST_M = 200;      // spatial uniqueness: every mark on the grid from a different place
 const RITUAL_MS = 10000;     // fixed reading duration
 const GOOD_FIX_M = 25;       // accuracy above this gets flagged on the record
 
@@ -44,7 +43,6 @@ const $ = id => document.getElementById(id);
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const PAPER = "#f4f0e6", INKHEX = "#b6412e";
-const prefs = getMediaPrefs();
 let ritualActive = false;
 
 // intro decision happens before the page is allowed to paint
@@ -121,11 +119,13 @@ function distM(aLat, aLon, bLat, bLon) {
 }
 
 // ---- stamping rules ----
-function tryStamp(capture) {
-  const kin = captures.filter(c => c.stamped && c.place === capture.place && c.weather === capture.weather);
-  if (kin.some(c => c.band === capture.band)) return { stamped: false, why: "already marked" };
-  if (kin.some(c => distM(c.lat, c.lon, capture.lat, capture.lon) < MIN_DIST))
-    return { stamped: false, why: "too near an earlier mark of this square" };
+function tryStamp(capture, ignoreId) {
+  // one place, one mark — anywhere on the grid
+  const marks = captures.filter(c => c.stamped && c.id !== ignoreId);
+  if (marks.some(c => c.place === capture.place && c.weather === capture.weather && c.band === capture.band))
+    return { stamped: false, why: "already marked" };
+  if (marks.some(c => distM(c.lat, c.lon, capture.lat, capture.lon) < MIN_DIST))
+    return { stamped: false, why: "too near an earlier mark" };
   return { stamped: true };
 }
 
@@ -237,12 +237,9 @@ function renderGrid(highlight, opts = {}) {
 
   const devOn = FORCE.weather || FORCE.place || FORCE.band || DEV.has("dist");
   $("counter").textContent = devOn ? "\u26a0 dev" : "";
-  const latest = captures[captures.length - 1];
-  $("status").textContent = latest
-    ? "Last reading: " + relativeDay(latest.time) + ", " + latest.band +
-      (latest.why ? " \u00b7 repeat" : "")
-    : "";
+  $("status").textContent = "";
   renderRepeats();
+  renderInlineDetails();
 }
 
 // a stamp lands: bud, mark — or deepen
@@ -329,51 +326,6 @@ function renderArc() {
     `<text x="${x2}" y="47" text-anchor="middle" font-size="10" fill="var(--ink)" opacity="0.8" font-family="var(--mono)">${fmt(set)}</text>`;
 }
 
-// ---- capture toggles ----
-const TOG_ICONS = {
-  cam: '<path d="M4 8h4l2-2h4l2 2h4v10H4Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/>',
-  mic: '<rect x="9.5" y="4" width="5" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6.5 11a5.5 5.5 0 0 0 11 0M12 16.5V20M9 20h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-};
-function togSvg(kind, on) {
-  return `<svg viewBox="0 0 24 24" width="100%" height="100%">${TOG_ICONS[kind]}` +
-    (on ? "" : '<path d="M4 3.5L20 20.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>') +
-    "</svg>";
-}
-function updateToggles() {
-  $("camTog").innerHTML = togSvg("cam", prefs.video);
-  $("micTog").innerHTML = togSvg("mic", prefs.audio);
-  $("camTog").classList.toggle("on", prefs.video);
-  $("camTog").classList.toggle("off", !prefs.video);
-  $("micTog").classList.toggle("on", prefs.audio);
-  $("micTog").classList.toggle("off", !prefs.audio);
-}
-async function toggleVideo() {
-  prefs.video = !prefs.video;
-  saveMediaPrefs(prefs);
-  updateToggles();
-  if (!ritualActive) return;
-  if (!prefs.video) {
-    stopVideo();
-    $("captureOverlay").classList.remove("video-live");
-    $("viewfinder").srcObject = null;
-  } else if (await startVideo() && ritualActive) {
-    $("viewfinder").srcObject = videoStreamRef();
-    $("captureOverlay").classList.add("video-live");
-  }
-}
-async function toggleAudio() {
-  prefs.audio = !prefs.audio;
-  saveMediaPrefs(prefs);
-  updateToggles();
-  if (!ritualActive) return;
-  if (!prefs.audio) {
-    stopAudio();
-    $("captureOverlay").classList.remove("audio-live");
-  } else if (await startAudio() && ritualActive) {
-    $("captureOverlay").classList.add("audio-live");
-  }
-}
-
 // ---- ritual phases ----
 let cancelFns = [];
 function capPhase(name) {
@@ -409,24 +361,18 @@ async function tryFix(timeoutMs) {
   } catch (e) { geoError = e; return false; }
 }
 
-// required sense, explained before asked — and a hard gate: no fix, no reading
-function primeLocation() {
+// hard gate, silent when it works: words appear only on failure
+function retryLocationCard() {
   return new Promise(res => {
     cancelFns.push(() => res(false));
     capPhase("priming");
     $("primeCard").innerHTML =
-      '<div>A reading is taken from your location and necessary for the game, but it is only stored on your device.</div>' +
-      '<button class="pill" id="locGo">Continue</button>' +
-      '<div id="locWait"></div>';
-    const go = $("locGo");
-    go.addEventListener("click", async () => {
-      lsSet("locPrimed", "1");
-      // our button steps aside: the browser's dialog is the one that grants
-      go.style.display = "none";
-      const pre = await geoPermState();
-      $("locWait").textContent = pre === "granted"
-        ? "Locating\u2026"
-        : "Answer your browser's location request.";
+      '<div id="locWait"></div>' +
+      '<button class="pill" id="locGo">Try again</button>';
+    $("locWait").textContent = "No location yet \u2014 open sky helps.";
+    $("locGo").addEventListener("click", async () => {
+      $("locGo").style.display = "none";
+      $("locWait").textContent = "Locating\u2026";
       const ok = await tryFix(20000);
       if (ok) return res(true);
       const st = await geoPermState();
@@ -435,44 +381,10 @@ function primeLocation() {
         showNote(geoHelp({ code: 1 }));
         return res(false);
       }
-      go.style.display = "";
-      if (st === "prompt") {
-        go.textContent = "Continue";
-        $("locWait").textContent = "Location permission hasn't been given yet \u2014 your browser will ask again.";
-      } else {
-        go.textContent = "Try again";
-        $("locWait").textContent = "No location yet \u2014 open sky helps.";
-      }
-    });
-  });
-}
-
-// optional senses, chosen before asked
-function primeMedia() {
-  return new Promise(res => {
-    cancelFns.push(() => res(false));
-    capPhase("priming");
-    const row = (kind, label, on) =>
-      `<div class="checkrow${on ? " checked" : ""}" data-k="${kind}">
-        <svg class="g" viewBox="0 0 24 24">${TOG_ICONS[kind]}</svg>
-        <div>${label}</div>
-        <div class="checkbox"><svg viewBox="0 0 14 14"><path d="M2 7.5L5.5 11L12 3.5" fill="none" stroke="#f4f0e6" stroke-width="2.4" stroke-linecap="round"/></svg></div>
-      </div>`;
-    $("primeCard").innerHTML =
-      '<div>Your readings can optionally include a photo and/or short sound clip. These are also stored only on your device.</div>' +
-      row("cam", "Photo", prefs.video) + row("mic", "Sound", prefs.audio) +
-      '<button class="pill" id="mediaGo">Continue</button>';
-    document.querySelectorAll("#primeCard .checkrow").forEach(r => {
-      r.addEventListener("click", () => {
-        const k = r.dataset.k === "cam" ? "video" : "audio";
-        prefs[k] = !prefs[k];
-        saveMediaPrefs(prefs);
-        r.classList.toggle("checked", prefs[k]);
-      });
-    });
-    $("mediaGo").addEventListener("click", () => {
-      lsSet("mediaPrimed", "1");
-      res(true);
+      $("locGo").style.display = "";
+      $("locWait").textContent = st === "prompt"
+        ? "Answer your browser's location request, then try again."
+        : "No location yet \u2014 open sky helps.";
     });
   });
 }
@@ -528,35 +440,25 @@ async function takeReading() {
   const overlay = $("captureOverlay");
   const viewfinder = $("viewfinder");
   overlay.classList.add("open");
-  updateToggles();
   ritualActive = true;
 
-  // arming: explain, choose, then settle each sense in turn — no time runs yet
-  let located = lsGet("locPrimed") ? await tryFix(8000) : false;
+  // arming: the browser's own prompts are the only words on the happy path
+  let located = await tryFix(20000);
   if (!located && geoError && geoError.code === 1 && (await geoPermState()) === "denied") {
     endRitual();
     showNote(geoHelp(geoError));
     return;
   }
-  if (!located) located = await primeLocation(); // card blocks until a real fix
+  if (!located) located = await retryLocationCard();
   if (!located || !ritualActive) return;
-  if (!lsGet("mediaPrimed")) {
-    if (!await primeMedia()) return;
-  }
-  if (!ritualActive) return;
   capPhase(null);
-  if (prefs.video) {
-    const ok = await startVideo();
-    if (ok && ritualActive) {
-      viewfinder.srcObject = videoStreamRef();
-      overlay.classList.add("video-live");
-    }
-  }
-  if (prefs.audio) {
-    const ok = await startAudio();
-    if (ok && ritualActive) overlay.classList.add("audio-live");
-  }
+  const senses = await startAllMedia();
   if (!ritualActive) return;
+  if (senses.video) {
+    viewfinder.srcObject = videoStreamRef();
+    overlay.classList.add("video-live");
+  }
+  if (senses.audio) overlay.classList.add("audio-live");
 
   // resolution starts while the player frames: by the tap, answers are usually already home
   let fix = null, weather = null, place = null, capture0Evidence = null;
@@ -598,7 +500,7 @@ async function takeReading() {
   if (!ritualActive) return;
 
   // close of the ring: take the frame, seal the sound
-  const photo = (prefs.video && overlay.classList.contains("video-live")) ? await snapPhoto(viewfinder) : null;
+  const photo = overlay.classList.contains("video-live") ? await snapPhoto(viewfinder) : null;
   const audio = await finishMedia();
   ritualActive = false;
   overlay.classList.remove("video-live", "audio-live");
@@ -639,11 +541,6 @@ async function takeReading() {
   capture.id = await addCapture(capture);
   captures.push(capture);
 
-  // one-time note when the reading saw but couldn't hear
-  if (photo && !audio && prefs.audio && !lsGet("micNoteSeen")) {
-    lsSet("micNoteSeen", "1");
-    showNote("This reading has a photo but no sound \u2014 the microphone isn't available to your browser.\n\nIf you want sound in your readings: Settings \u2192 Privacy & Security \u2192 Microphone \u2192 your browser, then allow the site's mic prompt on the next reading.\n\nReadings work fine without it.");
-  }
   if (capture.stamped) {
     landStamp(capture);
   } else {
@@ -736,7 +633,7 @@ async function resolvePending() {
         c.stamped = s.stamped;
         c.why = s.why;
         changed = true;
-        if (!c.stamped) flashStatus("Reading kept, not marked: " + c.why + ".");
+        if (!c.stamped) flashStatus("Kept \u00b7 " + c.why);
       }
       if (changed) {
         await putCapture(c);
@@ -749,16 +646,17 @@ async function resolvePending() {
 async function removeCapture(c) {
   await deleteCapture(c.id);
   captures = captures.filter(x => x.id !== c.id);
-  const promoted = await reEvaluateCell(c.place, c.weather);
+  const promoted = await reEvaluateAll();
   if (promoted) landStamp(promoted); else renderGrid();
 }
 
-async function reEvaluateCell(p, w) {
-  const kin = captures
-    .filter(x => x.place === p && x.weather === w && !x.stamped && x.why)
+// a freed location can seat refused readings anywhere on the grid, oldest first
+async function reEvaluateAll() {
+  const waiting = captures
+    .filter(x => !x.stamped && x.why && x.place !== "pending" && x.weather !== "pending")
     .sort((a, b) => a.time < b.time ? -1 : 1);
   let promoted = null;
-  for (const x of kin) {
+  for (const x of waiting) {
     x.why = undefined;
     const s = tryStamp(x);
     x.stamped = s.stamped;
@@ -769,20 +667,38 @@ async function reEvaluateCell(p, w) {
   return promoted;
 }
 
+// swap a kept reading onto the grid: the displaced mark becomes a repeat
+async function promoteCapture(c) {
+  const occupant = captures.find(x =>
+    x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
+  const s = tryStamp(c, occupant ? occupant.id : undefined);
+  if (!s.stamped) { flashStatus("Can't swap in: " + s.why + "."); return false; }
+  if (occupant) {
+    occupant.stamped = false;
+    occupant.why = "swapped out";
+    await putCapture(occupant);
+  }
+  c.stamped = true;
+  c.why = undefined;
+  await putCapture(c);
+  landStamp(c);
+  return true;
+}
+
 // row action icons: drawn, not typed, so weight and reach are ours to set
 const ICON_SHARE = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_X = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 6L18 18M18 6L6 18" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/></svg>';
 
 // ---- cell sheet ----
-function openSheet(p, w) {
-  const sheet = $("cellSheet");
-  $("sheetHead").innerHTML = glyph(p) + glyph(w);
-  const body = $("sheetBody");
-  body.innerHTML = "";
+const ICON_TRASH = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13M10 10.5v6M14 10.5v6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function buildRows(container, p, w, refresh) {
+  container.innerHTML = "";
   const rows = captures
     .filter(c => c.place === p && c.weather === w)
     .sort((a, b) => a.time < b.time ? 1 : -1);
-  if (!rows.length) body.innerHTML = '<div class="sheet-empty">Nothing here yet.</div>';
+  if (!rows.length) container.innerHTML = '<div class="sheet-empty">Nothing here yet.</div>';
   for (const c of rows) {
     const row = document.createElement("div");
     row.className = "sheet-row";
@@ -807,6 +723,16 @@ function openSheet(p, w) {
       });
       row.appendChild(btn);
     }
+    if (!c.stamped && c.why && c.place !== "pending" && c.weather !== "pending") {
+      const up = document.createElement("button");
+      up.className = "play";
+      up.innerHTML = ICON_PROMOTE;
+      up.addEventListener("click", async e => {
+        e.stopPropagation();
+        if (await promoteCapture(c)) refresh();
+      });
+      row.appendChild(up);
+    }
     const share = document.createElement("button");
     share.className = "play";
     share.innerHTML = ICON_SHARE;
@@ -819,17 +745,33 @@ function openSheet(p, w) {
     row.appendChild(share);
     const del = document.createElement("button");
     del.className = "play";
-    del.innerHTML = ICON_X;
+    del.innerHTML = ICON_TRASH;
     del.addEventListener("click", async e => {
       e.stopPropagation();
-      if (!confirm("Delete this reading? Its photo and sound go with it.")) return;
+      if (!confirm("Delete this recording? Its photo and sound go with it.")) return;
       await removeCapture(c);
-      openSheet(p, w); // refresh the sheet in place
+      refresh();
     });
     row.appendChild(del);
-    body.appendChild(row);
+    container.appendChild(row);
   }
+}
+
+function openSheet(p, w) {
+  const sheet = $("cellSheet");
+  $("sheetHead").innerHTML = glyph(p) + glyph(w);
+  buildRows($("sheetBody"), p, w, () => openSheet(p, w));
   sheet.classList.add("open");
+}
+
+// a one-cell board keeps its recordings in view, no tap needed
+function renderInlineDetails() {
+  const box = $("inlineDetails");
+  const occupied = [];
+  for (const p of PLACES) for (const w of WEATHERS)
+    if (captures.some(c => c.place === p && c.weather === w)) occupied.push([p, w]);
+  if (occupied.length !== 1) { box.innerHTML = ""; return; }
+  buildRows(box, occupied[0][0], occupied[0][1], renderInlineDetails);
 }
 
 // one permanent close handler: taps outside close the sheet,
@@ -871,10 +813,7 @@ function showPhoto(blob) {
   renderArc();
   setInterval(renderArc, 60000);
   $("readBtn").addEventListener("click", takeReading);
-  $("camTog").addEventListener("click", toggleVideo);
   $("capClose").addEventListener("click", endRitual);
-  $("micTog").addEventListener("click", toggleAudio);
-  updateToggles();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
   // then the archive arrives, however long it takes

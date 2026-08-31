@@ -32,6 +32,16 @@ body {
   display: flex;
   flex-direction: column;
 }
+.devbadge {
+  position: absolute;
+  top: var(--s3); right: var(--s4);
+  font-size: 11px;
+  color: var(--ink);
+  opacity: 0.75;
+}
+.devbadge:empty { display: none; }
+.inline-details { margin-top: var(--s4); }
+.inline-details:empty { display: none; }
 header {
   display: flex; justify-content: space-between; align-items: baseline;
   border-bottom: 2px solid var(--ink);
@@ -42,6 +52,7 @@ header {
 .counter { font-size: 12px; opacity: 0.75; }
 
 .grid {
+  margin-top: var(--s5);
   display: grid;
   grid-template-columns: 22px repeat(4, 1fr);
   gap: var(--s2);

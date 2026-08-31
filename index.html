@@ -24,26 +24,25 @@
       <svg id="arc" viewBox="0 0 200 50" aria-label="today's sun arc"></svg>
       <div class="status" id="status"></div>
     </div>
-    <button class="read" id="readBtn">TAKE<br>READING</button>
+    <button class="read" id="readBtn" aria-label="record"><svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="6.5" fill="var(--ink)"/></svg></button>
   </footer>
+
+  <div class="inline-details" id="inlineDetails"></div>
 
   <div class="repeats" id="repeats"></div>
 </div>
 
 <div class="overlay" id="introOverlay">
   <div class="intro-title">CIRCUMSTANCE</div>
-  <div class="note">Take this outside to play.
-Fill it slowly.
-
-Everything you record here — readings, photos, sound — stays on your device. Nothing is uploaded, ever.</div>
-  <button class="read" id="beginBtn">TAKE<br>READING</button>
+  <div class="note">Take this outside.
+Fill it slowly.</div>
+  <button class="read" id="beginBtn" aria-label="record"><svg viewBox="0 0 24 24" width="30" height="30"><circle cx="12" cy="12" r="6.5" fill="var(--ink)"/></svg></button>
 </div>
 
 <div class="overlay" id="revealOverlay">
   <button class="close" aria-label="close">&#215;</button>
   <div class="reveal-coin" id="revealCoin"></div>
   <div class="reveal-glyphs" id="revealGlyphs"></div>
-  <div class="note">Reading taken</div>
 </div>
 
 <div class="overlay capture" id="captureOverlay">
@@ -55,10 +54,6 @@ Everything you record here — readings, photos, sound — stays on your device.
     <svg class="ring" id="ring" viewBox="-100 -100 200 200"></svg>
   </div>
   <canvas id="wave" width="600" height="88"></canvas>
-  <div class="cap-toggles">
-    <button class="tbtn" id="camTog" aria-label="camera"></button>
-    <button class="tbtn" id="micTog" aria-label="microphone"></button>
-  </div>
 </div>
 
 <div class="overlay" id="noteOverlay">

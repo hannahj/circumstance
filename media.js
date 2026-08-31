@@ -17,6 +17,41 @@ function audioMime() {
   return null;
 }
 
+// media are part of every recording: one combined prompt when possible,
+// separate fallbacks so a blocked sense never silences the other, silent absence when unavailable
+export async function startAllMedia() {
+  let combined = null;
+  try {
+    combined = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
+  } catch {}
+  if (combined) {
+    videoStream = new MediaStream(combined.getVideoTracks());
+    const at = combined.getAudioTracks();
+    if (at.length) {
+      audioStream = new MediaStream(at);
+      wireRecorder();
+    }
+    return { video: videoStream.getTracks().length > 0, audio: !!recorder };
+  }
+  const v = await startVideo();
+  const a = await startAudio();
+  return { video: v, audio: a };
+}
+
+function wireRecorder() {
+  const track = audioStream.getAudioTracks()[0];
+  const mime = track && audioMime();
+  if (!mime) { stopAudio(); return; }
+  chunks = [];
+  recorder = new MediaRecorder(new MediaStream([track]), { mimeType: mime });
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.start();
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 256;
+  ac.createMediaStreamSource(audioStream).connect(analyser);
+}
+
 export async function startVideo() {
   if (videoStream) return true;
   try {
@@ -29,18 +64,8 @@ export async function startAudio() {
   if (recorder) return true;
   try { audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch { return false; }
-  const track = audioStream.getAudioTracks()[0];
-  const mime = track && audioMime();
-  if (!mime) { stopAudio(); return false; }
-  chunks = [];
-  recorder = new MediaRecorder(new MediaStream([track]), { mimeType: mime });
-  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-  recorder.start();
-  ac = new (window.AudioContext || window.webkitAudioContext)();
-  analyser = ac.createAnalyser();
-  analyser.fftSize = 256;
-  ac.createMediaStreamSource(audioStream).connect(analyser);
-  return true;
+  wireRecorder();
+  return !!recorder;
 }
 
 export function stopVideo() {
