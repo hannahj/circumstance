@@ -200,10 +200,10 @@ const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M
 // one sentence per refusal, in plain words
 function refusalText(s) {
   if (s.why === "already marked")
-    return "Kept \u00b7 this square is already marked in this light (flashing)";
+    return "Repeat \u2014 already marked in this light (flashing).";
   if (s.dist !== undefined)
-    return "Kept \u00b7 too near an earlier mark \u2014 " + s.dist + " m from the flashing one";
-  return "Kept \u00b7 " + s.why;
+    return "Repeat \u2014 " + s.dist + " m from an earlier mark (flashing).";
+  return "Repeat \u2014 " + s.why + ".";
 }
 
 // ---- rules: one place, one mark ----
@@ -226,26 +226,39 @@ async function reEvaluateAll() {
     .filter(x => !x.stamped && x.why && x.why !== "swapped out" &&
                  x.place !== "pending" && x.weather !== "pending")
     .sort((a, b) => a.time < b.time ? -1 : 1);
-  let promoted = null;
+  let promoted = null, firstRefusal = null;
   for (const x of waiting) {
+    if (!captures.includes(x)) continue; // deleted since this pass began
     x.why = undefined;
     const s = tryStamp(x);
     x.stamped = s.stamped;
     x.why = s.why;
     await putCapture(x);
     if (x.stamped && !promoted) promoted = x;
+    if (!x.stamped && !firstRefusal) firstRefusal = s;
   }
-  return promoted;
+  return { promoted, firstRefusal };
 }
 
-async function removeCapture(c) {
+// mutations run one at a time: overlapping deletes were resurrecting records mid-flight
+let opChain = Promise.resolve();
+const serialize = fn => { const p = opChain.then(fn, fn); opChain = p.catch(() => {}); return p; };
+
+function removeCapture(c) { return serialize(() => doRemove(c)); }
+async function doRemove(c) {
   await deleteCapture(c.id);
   captures = captures.filter(x => x.id !== c.id);
-  const promoted = await reEvaluateAll();
-  if (promoted) landStamp(promoted); else renderGrid();
+  const { promoted, firstRefusal } = await reEvaluateAll();
+  if (promoted) landStamp(promoted);
+  else if (firstRefusal && firstRefusal.conflict) {
+    // deletion freed nothing: show what still blocks
+    renderGrid({ place: firstRefusal.conflict.place, weather: firstRefusal.conflict.weather, band: firstRefusal.conflict.band });
+    flashStatus(refusalText(firstRefusal));
+  } else renderGrid();
 }
 
-async function promoteCapture(c) {
+function promoteCapture(c) { return serialize(() => doPromote(c)); }
+async function doPromote(c) {
   const occupant = captures.find(x =>
     x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
   const s = tryStamp(c, occupant ? occupant.id : undefined);
@@ -788,7 +801,7 @@ async function takeReading() {
     band: timeBand(fix.coords.latitude, fix.coords.longitude, now).band,
     photo, audio,
     weather: weather ? weather.bucket : "pending",
-    weatherCode: weather?.code, tempC: weather?.temp, windKmh: weather?.wind,
+    weatherCode: weather?.code, tempC: weather?.temp, windKmh: weather?.wind, cloud: weather?.cloud,
     place: place || "pending",
     stamped: false,
   };
@@ -812,11 +825,13 @@ async function takeReading() {
   captures.push(capture);
   ping("recording");
 
+  if (DEV.has("debug") && capture.cloud !== undefined)
+    setTimeout(() => flashStatus(capture.weather + " \u00b7 " + capture.cloud + "% cloud cover"), 2600);
   if (capture.stamped) landStamp(capture);
   else {
     renderGrid(refusedBy ? { place: refusedBy.place, weather: refusedBy.weather, band: refusedBy.band } : undefined);
     if (capture.why) flashStatus(refusalText({ why: capture.why, dist: capture.refusedDist }));
-    else flashStatus("Recorded \u00b7 resolving\u2026");
+    else flashStatus("Recorded \u2014 resolving\u2026");
   }
   $("readBtn").disabled = false;
 
@@ -949,7 +964,7 @@ document.addEventListener("visibilitychange", () => {
       repaired = true;
     }
   }
-  if (repaired) await reEvaluateAll();
+  if (repaired) { const r = await reEvaluateAll(); if (r.promoted) renderGrid(); }
 
   if (DEV.get("purge") === "dev") {
     const dev = captures.filter(c => c.devForced);
