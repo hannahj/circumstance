@@ -335,6 +335,21 @@ function landStamp(c) {
   }
 }
 
+// a one-line anchored tip that dismisses itself
+function showTip(anchor, text) {
+  document.querySelectorAll(".tip").forEach(t => t.remove());
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  tip.textContent = text;
+  document.body.appendChild(tip);
+  const r = anchor.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + "px";
+  tip.style.top = Math.max(8, r.top - tip.offsetHeight - 8) + "px";
+  const dismiss = () => { tip.remove(); document.removeEventListener("pointerdown", dismiss, true); };
+  setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 50);
+  setTimeout(dismiss, 3200);
+}
+
 // ---- the circumstances list: every recording, always up ----
 function renderCircumstances() {
   const box = $("repeats");
@@ -377,7 +392,7 @@ function renderCircumstances() {
     const more = document.createElement("button");
     more.className = "play morebtn";
     more.textContent = "\u22ef";
-    more.addEventListener("click", () => row.classList.add("more-open"));
+    more.addEventListener("click", () => row.classList.toggle("more-open"));
     row.appendChild(more);
     if (!c.stamped && c.why && !pending) {
       const up = document.createElement("button");
@@ -403,7 +418,7 @@ function renderCircumstances() {
         renderGrid({ place: c.place, weather: c.weather, band: c.band });
         $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
       } else {
-        showNote("A repeat circumstance \u2014 recorded and kept, but not on the grid.\n\nEvery mark needs its own place, at least 200 m from every other. The \u2191 swaps this one onto the grid; whatever it replaces is kept here.");
+        showTip(row, "Repeat \u2014 not on the grid. \u2191 replaces another.");
       }
     });
     box.appendChild(row);

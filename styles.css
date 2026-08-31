@@ -174,10 +174,24 @@ body.hush .footer, body.hush .repeats { opacity: 0.25; transition: opacity 0.6s 
   text-transform: uppercase;
   margin-block: var(--s2) var(--s4);
 }
-/* overflow actions: hidden until the row's ⋯ is tapped */
+/* overflow actions: the row's ⋯ toggles them; revealed light, borderless */
 .sheet-row .more { display: none; }
-.sheet-row.more-open .more { display: inline-grid; }
-.sheet-row.more-open .morebtn { display: none; }
+.sheet-row.more-open .more { display: inline-grid; border: none; width: 34px; height: 40px; }
+.sheet-row.more-open .morebtn { transform: rotate(90deg); }
+
+/* tooltip: one small sentence, anchored, self-dismissing */
+.tip {
+  position: fixed;
+  z-index: 60;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  max-width: 240px;
+  line-height: 1.5;
+}
 
 /* overlays: the ritual, a note (errors), a photo viewer */
 .overlay {
