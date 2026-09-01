@@ -23,6 +23,18 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// photos are rounded squares now, matching the page; coins and empties stay circles
+async function rectPhoto(ctx, blob, x, y, w, h, r) {
+  const bmp = await createImageBitmap(blob);
+  ctx.save();
+  roundRect(ctx, x, y, w, h, r);
+  ctx.clip();
+  const sc = Math.max(w / bmp.width, h / bmp.height);
+  ctx.drawImage(bmp, x + w / 2 - bmp.width * sc / 2, y + h / 2 - bmp.height * sc / 2, bmp.width * sc, bmp.height * sc);
+  ctx.restore();
+  bmp.close();
+}
+
 async function circlePhoto(ctx, blob, cx, cy, r) {
   const bmp = await createImageBitmap(blob);
   ctx.save();
@@ -38,10 +50,10 @@ async function circlePhoto(ctx, blob, cx, cy, r) {
 // layout mirrors the page: witnessed rows and columns only; deep boards show quadrants.
 // canvas sized to the board itself — no fixed width, no dead margins
 export async function boardBlob({ captures, places, weathers, bands, glyph, deepened }) {
-  const CELL = 340, GH = 110, GAP = 34, M = 90, CAPTION = 120;
+  const CELL = 340, GH = 110, GAP = 34, M = 72, MT = 40, CAPTION = 110;
   const cols = weathers.length, rowsN = places.length;
   const W = 2 * M + GH + cols * CELL + (cols - 1) * GAP;
-  const H = M + GH + rowsN * CELL + (rowsN - 1) * GAP + CAPTION + M / 2;
+  const H = MT + GH + rowsN * CELL + (rowsN - 1) * GAP + CAPTION + M / 2;
 
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
@@ -52,15 +64,15 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
   const x0 = M, gsize = 66;
   for (let ci = 0; ci < cols; ci++) {
     const img = await svgImage(glyph(weathers[ci], gsize));
-    ctx.drawImage(img, x0 + GH + ci * (CELL + GAP) + CELL / 2 - gsize / 2, M + (GH - gsize) / 2 - 12);
+    ctx.drawImage(img, x0 + GH + ci * (CELL + GAP) + CELL / 2 - gsize / 2, MT + (GH - gsize) / 2 - 12);
   }
   for (let ri = 0; ri < rowsN; ri++) {
     const img = await svgImage(glyph(places[ri], gsize));
-    ctx.drawImage(img, x0 + (GH - gsize) / 2 - 12, M + GH + ri * (CELL + GAP) + CELL / 2 - gsize / 2);
+    ctx.drawImage(img, x0 + (GH - gsize) / 2 - 12, MT + GH + ri * (CELL + GAP) + CELL / 2 - gsize / 2);
   }
 
   for (let ri = 0; ri < rowsN; ri++) for (let ci = 0; ci < cols; ci++) {
-    const x = x0 + GH + ci * (CELL + GAP), y = M + GH + ri * (CELL + GAP);
+    const x = x0 + GH + ci * (CELL + GAP), y = MT + GH + ri * (CELL + GAP);
     ctx.strokeStyle = INK;
     ctx.lineWidth = 5;
     ctx.setLineDash([]);
@@ -69,7 +81,8 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
     const kin = captures.filter(c => c.stamped && c.place === places[ri] && c.weather === weathers[ci]);
     if (!deepened) {
       const r = CELL * 0.34, cx = x + CELL / 2, cy = y + CELL / 2;
-      if (kin[0] && kin[0].photo) await circlePhoto(ctx, kin[0].photo, cx, cy, r);
+      const sq = CELL * 0.68;
+      if (kin[0] && kin[0].photo) await rectPhoto(ctx, kin[0].photo, cx - sq / 2, cy - sq / 2, sq, sq, 18);
       else if (kin[0]) { ctx.fillStyle = SKYHEX[kin[0].band]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
       else {
         ctx.strokeStyle = "rgba(182,65,46,0.45)";
@@ -81,11 +94,12 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
       const marks = {};
       for (const c of kin) marks[c.band] = c;
       const r = CELL * 0.185;
+      const qs = CELL * 0.40; // quadrant photo square
       for (let qi = 0; qi < 4; qi++) {
         const cx = x + CELL * (qi % 2 ? 0.725 : 0.275);
         const cy = y + CELL * (qi > 1 ? 0.725 : 0.275);
         const m = marks[bands[qi]];
-        if (m && m.photo) await circlePhoto(ctx, m.photo, cx, cy, r);
+        if (m && m.photo) await rectPhoto(ctx, m.photo, cx - qs / 2, cy - qs / 2, qs, qs, 14);
         else if (m) { ctx.fillStyle = SKYHEX[m.band]; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
         else {
           ctx.strokeStyle = "rgba(182,65,46,0.45)";
@@ -102,7 +116,7 @@ export async function boardBlob({ captures, places, weathers, bands, glyph, deep
   ctx.font = "500 42px ui-monospace, Menlo, monospace";
   ctx.textAlign = "center";
   ctx.letterSpacing = "11px";
-  ctx.fillText("CIRCUMSTANCE", W / 2, H - M / 2 - 28);
+  ctx.fillText("CIRCUMSTANCE", W / 2, H - 46);
 
   return new Promise(res => canvas.toBlob(res, "image/png"));
 }
