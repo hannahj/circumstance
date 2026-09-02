@@ -1,24 +1,8 @@
-// media are encouraged, never required — and each sense is independent
-const LSKEY = "mediaPrefs";
-export function getMediaPrefs() {
-  try { return JSON.parse(localStorage.getItem(LSKEY)) || { video: true, audio: true }; }
-  catch { return { video: true, audio: true }; }
-}
-export function saveMediaPrefs(p) {
-  try { localStorage.setItem(LSKEY, JSON.stringify(p)); } catch {}
-}
+// camera and mic for the clip; the mic also feeds the live waveform
+let videoStream = null, audioStream = null, ac = null, analyser = null;
 
-let videoStream = null, audioStream = null, recorder = null, chunks = [], ac = null, analyser = null;
-
-function audioMime() {
-  if (!window.MediaRecorder) return null;
-  for (const m of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"])
-    if (MediaRecorder.isTypeSupported(m)) return m;
-  return null;
-}
-
-// media are part of every recording: one combined prompt when possible,
-// separate fallbacks so a blocked sense never silences the other, silent absence when unavailable
+// one combined prompt when possible, separate fallbacks so a blocked sense never silences the other,
+// silent absence when unavailable
 export async function startAllMedia() {
   let combined = null;
   try {
@@ -27,60 +11,22 @@ export async function startAllMedia() {
   if (combined) {
     videoStream = new MediaStream(combined.getVideoTracks());
     const at = combined.getAudioTracks();
-    if (at.length) {
-      audioStream = new MediaStream(at);
-      wireRecorder();
-    }
-    return { video: videoStream.getTracks().length > 0, audio: !!recorder };
+    if (at.length) { audioStream = new MediaStream(at); wireAnalyser(); }
+  } else {
+    try { videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); } catch {}
+    try { audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }); wireAnalyser(); } catch {}
   }
-  const v = await startVideo();
-  const a = await startAudio();
-  return { video: v, audio: a };
+  return { video: !!videoStream && videoStream.getTracks().length > 0, audio: !!audioStream };
 }
 
-function wireRecorder() {
-  const track = audioStream.getAudioTracks()[0];
-  const mime = track && audioMime();
-  if (!mime) { stopAudio(); return; }
-  chunks = [];
-  recorder = new MediaRecorder(new MediaStream([track]), { mimeType: mime });
-  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-  recorder.start();
+function wireAnalyser() {
   ac = new (window.AudioContext || window.webkitAudioContext)();
   analyser = ac.createAnalyser();
   analyser.fftSize = 256;
   ac.createMediaStreamSource(audioStream).connect(analyser);
 }
 
-export async function startVideo() {
-  if (videoStream) return true;
-  try {
-    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-    return true;
-  } catch { return false; }
-}
-
-export async function startAudio() {
-  if (recorder) return true;
-  try { audioStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { return false; }
-  wireRecorder();
-  return !!recorder;
-}
-
-export function stopVideo() {
-  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
-}
-
-export function stopAudio() {
-  if (recorder && recorder.state !== "inactive") { try { recorder.stop(); } catch {} }
-  recorder = null; chunks = [];
-  if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
-  if (ac) { ac.close(); ac = null; analyser = null; }
-}
-
 export function videoStreamRef() { return videoStream; }
-export function audioActive() { return !!recorder; }
 
 // live amplitude levels for the waveform (null when no mic is running)
 export function waveLevels(n = 24) {
@@ -96,6 +42,7 @@ export function waveLevels(n = 24) {
   return out;
 }
 
+// poster frame at release: the grid and list draw from this
 export function snapPhoto(videoEl) {
   return new Promise(res => {
     if (!videoEl.videoWidth) return res(null);
@@ -109,28 +56,14 @@ export function snapPhoto(videoEl) {
   });
 }
 
-// seal the sound, stop every sense
+// stop every sense
 export function finishMedia() {
-  return new Promise(res => {
-    const cleanup = () => {
-      stopVideo();
-      if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
-      if (ac) { ac.close(); ac = null; analyser = null; }
-    };
-    if (recorder && recorder.state !== "inactive") {
-      const mime = recorder.mimeType;
-      recorder.onstop = () => {
-        const b = chunks.length ? new Blob(chunks, { type: mime }) : null;
-        recorder = null; chunks = [];
-        cleanup();
-        res(b);
-      };
-      recorder.stop();
-    } else { recorder = null; cleanup(); res(null); }
-  });
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+  if (audioStream) { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
+  if (ac) { ac.close(); ac = null; analyser = null; }
 }
 
-// ---- clip recording (?video=1 experiment): camera+mic into one short video ----
+// ---- the clip: camera+mic into one short video ----
 let clipRec = null, clipChunks = [];
 function clipMime() {
   if (typeof MediaRecorder === "undefined") return null;
