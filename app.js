@@ -1,6 +1,7 @@
 import { timeBand } from "./sun.js";
 import { fetchWeatherNow, backfillWeather } from "./weather.js";
-import { classifyPlace, takeEvidence } from "./classify.js";
+import { classifyPlace as classifyOsm, takeEvidence as takeOsmEvidence } from "./classify.js";
+import { classifyPlace as classifyWc, takeEvidence as takeWcEvidence } from "./classify-wc.js";
 import { addCapture, putCapture, allCaptures, deleteCapture, isEphemeral } from "./db.js";
 import { startAllMedia, videoStreamRef, waveLevels, snapPhoto, finishMedia, startClip, stopClip } from "./media.js";
 import { shareCapture } from "./share.js";
@@ -44,6 +45,10 @@ const FORCE = {
   band: BANDS.includes(DEV.get("b")) ? DEV.get("b") : null,
 };
 const MIN_DIST = DEV.has("dist") ? Math.max(0, +DEV.get("dist") || 0) : MIN_DIST_M;
+// place comes from satellite land cover (classify-wc.js); ?wc=0 restores the OSM-only classifier
+const WC = DEV.get("wc") !== "0";
+const classifyPlace = WC ? classifyWc : classifyOsm;
+const takeEvidence = WC ? takeWcEvidence : takeOsmEvidence;
 
 const $ = id => document.getElementById(id);
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -370,7 +375,7 @@ function renderGrid(highlight, opts = {}) {
     }
   }
 
-  const devOn = FORCE.weather || FORCE.place || FORCE.band || DEV.has("dist");
+  const devOn = FORCE.weather || FORCE.place || FORCE.band || DEV.has("dist") || !WC;
   $("counter").textContent = devOn ? "\u26a0 dev" : "";
   $("status").textContent = "";
   renderCircumstances();

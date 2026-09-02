@@ -1,0 +1,29 @@
+{
+ "source": "ESA WorldCover 2021 v200",
+ "tileDeg": 0.05,
+ "tilePx": 600,
+ "pxDeg": 8.333333333333333e-05,
+ "lat": [
+  45.05,
+  45.65
+ ],
+ "lon": [
+  -76.35,
+  -75.25
+ ],
+ "latIdx": [
+  901,
+  913
+ ],
+ "lonIdx": [
+  -1527,
+  -1505
+ ],
+ "codes": {
+  "0": "open",
+  "1": "forest",
+  "2": "water",
+  "3": "built",
+  "4": "nodata"
+ }
+}

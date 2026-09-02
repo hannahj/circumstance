@@ -62,7 +62,8 @@ function loadCaptures() {
     pts.push([c.lat, c.lon]);
     const band = typeof c.band === "string" ? c.band : (c.band && c.band.band) || "day";
     const ev = c.placeEvidence
-      ? Object.entries(c.placeEvidence).map(([k, v]) => `${k}: ${Math.round(v)} m`).join("<br>")
+      ? Object.entries(c.placeEvidence).map(([k, v]) =>
+          typeof v === "number" ? `${k}: ${Math.round(v)} m` : `${k}: ${JSON.stringify(v)}`).join("<br>")
       : "(no evidence stored)";
     const popup =
       `<b>${c.place} · ${c.weather} · ${band}</b><br>` +
