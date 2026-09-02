@@ -799,6 +799,8 @@ async function takeReading() {
         flashStatus(refusalText(late));
       } else renderGrid();
     }
+    // a lookup failed outright: try again now rather than waiting for the heartbeat
+    if (capture.place === "pending" || capture.weather === "pending") resolvePending();
   });
 }
 

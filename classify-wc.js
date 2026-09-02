@@ -83,22 +83,44 @@ area.a["leisure"~"^(park|sports_centre|water_park)$"]->.park;
 out tags;`;
 }
 
+// device-side memory of OSM answers: zoning per ~110 m square (polygons are neighbourhoods),
+// water per ~11 m (a fountain beside you once must not follow you down the street)
+function osmCache(get, key, val) {
+  try {
+    const m = JSON.parse(localStorage.getItem("osmCache") || "{}");
+    if (get) return m[key] || null;
+    m[key] = val;
+    const keys = Object.keys(m);
+    if (keys.length > 600) for (const k of keys.slice(0, keys.length - 600)) delete m[k];
+    localStorage.setItem("osmCache", JSON.stringify(m));
+  } catch { return null; }
+}
+
 async function osmLookup(lat, lon) {
-  const res = await fetch(PROXY_URL, { method: "POST", body: osmQuery(lat, lon), signal: AbortSignal.timeout(8000) });
+  const zk = "z" + lat.toFixed(3) + "," + lon.toFixed(3), wk = "w" + lat.toFixed(4) + "," + lon.toFixed(4);
+  const z = osmCache(true, zk), w = osmCache(true, wk);
+  if (z && w) return { ...z, ...w, cached: true };
+  // a refinement, not the answer: if it can't come back in 5 s the satellite stands alone
+  const res = await fetch(PROXY_URL, { method: "POST", body: osmQuery(lat, lon), signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(await res.text() || "HTTP " + res.status);
   // sort by tags, not element type: Overpass hands is_in areas back as ways
   const tags = ((await res.json()).elements || []).map(e => e.tags || {});
-  return {
+  const out = {
     water: tags.some(t => /^(water|wetland)$/.test(t.natural) || t.waterway || t.amenity === "fountain" || t.leisure === "swimming_pool"),
     zoned: tags.some(t => /^(residential|commercial|industrial|retail)$/.test(t.landuse)),
     wooded: tags.some(t => t.natural === "wood" || t.landuse === "forest" || /^(park|nature_reserve)$/.test(t.leisure)),
   };
+  osmCache(false, zk, { zoned: out.zoned, wooded: out.wooded });
+  osmCache(false, wk, { water: out.water });
+  return out;
 }
 
 let _evidence = null;
 export function takeEvidence() { const e = _evidence; _evidence = null; return e; }
 
 export async function classifyPlace(lat, lon) {
+  // the OSM question leaves at the same time as the tile reads; its answer is only used if needed
+  const osmWork = osmLookup(lat, lon).catch(() => null); // unknown, not false
   let close, shore, wide;
   try {
     close = await tally(lat, lon, CFG.CLOSE);
@@ -114,10 +136,7 @@ export async function classifyPlace(lat, lon) {
 
   const near = majority(close);
   const atWater = near === "water" || shore.water > 0;
-  let osm = null;
-  if (!atWater) {
-    try { osm = await osmLookup(lat, lon); } catch { osm = null; } // unknown, not false
-  }
+  const osm = atWater ? null : await osmWork;
 
   // forest needs tree cover under you and around you, and not to be a treed street:
   // OSM zoning (residential and the like) vetoes it unless a wood or park is mapped there too
