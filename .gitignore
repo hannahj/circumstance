@@ -1,3 +1,4 @@
 tools/wc-region.npy
 *.tif
 .DS_Store
+docs/
