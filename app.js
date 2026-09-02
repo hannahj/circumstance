@@ -11,9 +11,7 @@ import { shareBoard } from "./board-export.js";
 
 // rules
 const MIN_DIST_M = 200;      // spatial uniqueness: every mark on the grid from a different place
-const RITUAL_MS = 10000;     // reading cap (fixed duration in tap mode)
-const VIDEO = new URLSearchParams(location.search).get("video") !== "0"; // clip capture is the default; ?video=0 restores photo+sound
-const HOLD = VIDEO || new URLSearchParams(location.search).has("hold"); // video implies hold-to-record
+const RITUAL_MS = 10000;     // the ring closes: a clip can be no longer than this
 const HOLD_MIN_MS = 1000;    // shorter holds reset gently instead of minting junk
 const GOOD_FIX_M = 25;       // accuracy above this gets flagged on the record
 
@@ -526,7 +524,7 @@ function renderCircumstances() {
     del.className = "play more";
     del.innerHTML = ICON_TRASH;
     del.addEventListener("click", async () => {
-      if (!confirm("Delete this recording? Its photo and sound go with it.")) return;
+      if (!confirm("Delete this recording? Its video goes with it.")) return;
       await removeCapture(c);
     });
     row.appendChild(del);
@@ -604,38 +602,7 @@ function drawWave(wctx, overVideo) {
   });
 }
 
-// the player fires the reading: a tap begins it
-function readyPhase() {
-  return new Promise(res => {
-    cancelFns.push(() => res(false));
-    capPhase("ready");
-    const ov = $("captureOverlay");
-    const wctx = $("wave").getContext("2d");
-    let settled = false;
-    const down = e => {
-      if (settled || e.target.closest(".close")) return;
-      settled = true;
-      cleanup();
-      res(true);
-    };
-    ov.addEventListener("pointerdown", down);
-    const cleanup = () => ov.removeEventListener("pointerdown", down);
-    (function frame() {
-      if (!ritualActive || settled) { cleanup(); return; }
-      const overVideo = ov.classList.contains("video-live");
-      const stroke = overVideo ? PAPER : "var(--ink)";
-      const track = overVideo ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
-      const pulse = 6 + 2 * Math.sin(Date.now() / 320);
-      $("ring").innerHTML =
-        `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
-        `<circle r="${pulse.toFixed(1)}" fill="${stroke}"/>`;
-      drawWave(wctx, overVideo);
-      requestAnimationFrame(frame);
-    })();
-  });
-}
-
-// hold-to-record (dev experiment): press grows the ring, release seals; too-short holds reset
+// hold to record: press grows the ring, release seals; too-short holds reset
 function holdPhase(overlay) {
   return new Promise(res => {
     cancelFns.push(() => res(false));
@@ -659,7 +626,7 @@ function holdPhase(overlay) {
       try { overlay.setPointerCapture(e.pointerId); } catch {}
       holding = true;
       t0 = Date.now();
-      if (VIDEO) startClip();
+      startClip();
       capPhase("reading");
     };
     const up = () => {
@@ -667,7 +634,7 @@ function holdPhase(overlay) {
       holding = false;
       if (Date.now() - t0 >= HOLD_MIN_MS) seal();
       else {
-        if (VIDEO) stopClip(); // discard the graze
+        stopClip(); // discard the graze
         capPhase("ready");
       }
     };
@@ -733,7 +700,7 @@ async function takeReading() {
   }
   if (senses.audio) overlay.classList.add("audio-live");
 
-  // resolution starts while the player frames: by the tap, answers are usually already home
+  // resolution starts while the player frames: by the release, answers are usually already home
   let fix = null, weather = null, place = null, capture0Evidence = null;
   const work = bestFix(RITUAL_MS - 1000).then(async f => {
     fix = f;
@@ -745,44 +712,13 @@ async function takeReading() {
   }).catch(() => {});
 
   // ready: the player frames, listens, and chooses the moment
-  let heldMs = null;
-  if (HOLD) {
-    heldMs = await holdPhase(overlay);
-    if (!heldMs || !ritualActive) return;
-  } else {
-  if (!await readyPhase()) return;
-  if (!ritualActive) return;
-
-  // the reading: a fixed window, hands-free
-  capPhase("reading");
-  const t0 = Date.now();
-  const wctx = $("wave").getContext("2d");
-  await new Promise(done => {
-    (function frame() {
-      if (!ritualActive) return done();
-      const t = Math.min(1, (Date.now() - t0) / RITUAL_MS);
-      const a = Math.min(t, 0.9999) * 2 * Math.PI; // clockwise from the top
-      const x = 80 * Math.sin(a), y = -80 * Math.cos(a);
-      const large = a > Math.PI ? 1 : 0;
-      const ov2 = overlay.classList.contains("video-live");
-      const stroke = ov2 ? PAPER : "var(--ink)";
-      const track = ov2 ? "rgba(244,240,230,0.35)" : "var(--ink-wash-12)";
-      $("ring").innerHTML =
-        `<circle r="80" fill="none" stroke="${track}" stroke-width="3"/>` +
-        (t > 0.01 ? `<path d="M0 -80 A80 80 0 ${large} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round"/>` : "") +
-        (ov2 ? "" : `<circle r="6" fill="var(--ink)"/>`);
-      drawWave(wctx, ov2);
-      if (t < 1) requestAnimationFrame(frame); else done();
-    })();
-  });
-  }
-  if (!ritualActive) return;
+  const heldMs = await holdPhase(overlay);
+  if (!heldMs || !ritualActive) return;
 
   // close of the ring: seal the clip, take the poster frame, stop the senses
-  const clip = VIDEO ? await stopClip() : null;
+  const clip = await stopClip();
   const photo = overlay.classList.contains("video-live") ? await snapPhoto(viewfinder) : null;
-  let audio = await finishMedia();
-  if (clip) audio = null; // the clip carries the sound
+  finishMedia();
   ritualActive = false;
   overlay.classList.remove("video-live", "audio-live");
   viewfinder.srcObject = null;
@@ -804,13 +740,13 @@ async function takeReading() {
     lat: fix.coords.latitude,
     lon: fix.coords.longitude,
     band: timeBand(fix.coords.latitude, fix.coords.longitude, now).band,
-    photo, audio,
+    photo,
     weather: weather ? weather.bucket : "pending",
     weatherCode: weather?.code, tempC: weather?.temp, windKmh: weather?.wind, cloud: weather?.cloud,
     place: place || "pending",
     stamped: false,
   };
-  if (heldMs) capture.heldMs = heldMs;
+  capture.heldMs = heldMs;
   if (clip) capture.video = clip;
   if (capture0Evidence) capture.placeEvidence = capture0Evidence;
   if (weather?.backfilled) capture.weatherBackfilled = true;
@@ -907,8 +843,6 @@ document.addEventListener("visibilitychange", () => {
 // ---- init ----
 (async function init() {
   // paint and wire everything synchronously: no data load may delay the page
-  if (HOLD) document.querySelector(".capthint").textContent = "HOLD TO RECORD";
-  if (VIDEO) flashStatus("clip mode");
   renderGrid();
   ping("open");
   $("readBtn").addEventListener("click", takeReading);
