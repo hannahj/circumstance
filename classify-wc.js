@@ -80,18 +80,18 @@ area.a["leisure"~"^(park|sports_centre|water_park)$"]->.park;
   way(around:${r},${lat},${lon})["leisure"="swimming_pool"]["name"];
   way(around:${r},${lat},${lon})["leisure"="swimming_pool"](area.park);
 );
-out ids;`;
+out tags;`;
 }
 
 async function osmLookup(lat, lon) {
   const res = await fetch(PROXY_URL, { method: "POST", body: osmQuery(lat, lon), signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(await res.text() || "HTTP " + res.status);
-  const els = (await res.json()).elements || [];
-  const areas = els.filter(e => e.type === "area").map(e => e.tags || {});
+  // sort by tags, not element type: Overpass hands is_in areas back as ways
+  const tags = ((await res.json()).elements || []).map(e => e.tags || {});
   return {
-    water: els.some(e => e.type !== "area"),
-    zoned: areas.some(t => /^(residential|commercial|industrial|retail)$/.test(t.landuse)),
-    wooded: areas.some(t => t.natural === "wood" || t.landuse === "forest" || /^(park|nature_reserve)$/.test(t.leisure)),
+    water: tags.some(t => /^(water|wetland)$/.test(t.natural) || t.waterway || t.amenity === "fountain" || t.leisure === "swimming_pool"),
+    zoned: tags.some(t => /^(residential|commercial|industrial|retail)$/.test(t.landuse)),
+    wooded: tags.some(t => t.natural === "wood" || t.landuse === "forest" || /^(park|nature_reserve)$/.test(t.leisure)),
   };
 }
 
