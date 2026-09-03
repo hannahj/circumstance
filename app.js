@@ -197,6 +197,7 @@ function showPhoto(blob, audioBlob) {
 
 const ICON_SHARE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M6.5 17.5L17 7M9.5 6.5H17.5V14.5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_TRASH = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13M10 10.5v6M14 10.5v6" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_DEMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 5v13M7 13l5 5 5-5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICON_PROMOTE = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 19V6M7 11l5-5 5 5" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 
@@ -226,7 +227,7 @@ function tryStamp(capture, ignoreId) {
 
 async function reEvaluateAll() {
   const waiting = captures
-    .filter(x => !x.stamped && x.why && x.why !== "swapped out" &&
+    .filter(x => !x.stamped && x.why && x.why !== "swapped out" && x.why !== "taken off" &&
                  x.place !== "pending" && x.weather !== "pending")
     .sort((a, b) => a.time < b.time ? -1 : 1);
   let promoted = null, firstRefusal = null;
@@ -260,22 +261,33 @@ async function doRemove(c) {
   } else renderGrid();
 }
 
+// promote means "this one": whatever blocks it, the cell's occupant or a mark within 200 m in
+// another cell, is swapped out. The board changes only by the player's hand.
 function promoteCapture(c) { return serialize(() => doPromote(c)); }
 async function doPromote(c) {
-  const occupant = captures.find(x =>
-    x.stamped && x.place === c.place && x.weather === c.weather && x.band === c.band);
-  const s = tryStamp(c, occupant ? occupant.id : undefined);
-  if (!s.stamped) return { ok: false, why: s.why, conflict: s.conflict };
-  if (occupant) {
-    occupant.stamped = false;
-    occupant.why = "swapped out";
-    await putCapture(occupant);
+  const marks = captures.filter(x => x.stamped && x.id !== c.id);
+  const blockers = marks.filter(x =>
+    (x.place === c.place && x.weather === c.weather && x.band === c.band) ||
+    distM(x.lat, x.lon, c.lat, c.lon) < MIN_DIST);
+  for (const b of blockers) {
+    b.stamped = false;
+    b.why = "swapped out";
+    await putCapture(b);
   }
   c.stamped = true;
   c.why = undefined;
   await putCapture(c);
   landStamp(c);
-  return { ok: true };
+}
+
+// taking a mark off the board: it stays kept, retired like a swapped-out one. The slot
+// stays empty until the player promotes something; nothing lands unchosen
+function demoteCapture(c) { return serialize(() => doDemote(c)); }
+async function doDemote(c) {
+  c.stamped = false;
+  c.why = "taken off";
+  await putCapture(c);
+  renderGrid();
 }
 
 // ---- rendering: the grid grows toward what the player witnesses ----
@@ -506,19 +518,20 @@ function renderCircumstances() {
       up.className = "play more";
       up.innerHTML = ICON_PROMOTE;
       up.addEventListener("click", async () => {
-        const r = await promoteCapture(c);
-        if (r.ok) {
-          $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
-        } else if (r.conflict) {
-          // show the blocker itself: flash it on the grid and say why beside it
-          renderGrid({ place: r.conflict.place, weather: r.conflict.weather, band: r.conflict.band });
-          $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
-          flashStatus("Can't swap \u2014 " + r.why + " (flashing).");
-        } else {
-          showTip(row, "Can't swap \u2014 " + r.why + ".");
-        }
+        await promoteCapture(c);
+        $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
       });
       row.appendChild(up);
+    }
+    if (c.stamped) {
+      const down = document.createElement("button");
+      down.className = "play more";
+      down.innerHTML = ICON_DEMOTE;
+      down.addEventListener("click", async () => {
+        await demoteCapture(c);
+        $("grid").scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      row.appendChild(down);
     }
     const del = document.createElement("button");
     del.className = "play more";
